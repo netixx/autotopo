@@ -49,6 +49,16 @@ EXP_RESULTS = {
     "time" :
         {
             "time" : ['avg', 'cdf']
+        },
+    "timeAgentConn" :
+        {
+           "avg" : ['avg', 'cdf'],
+           ("time", "avg") : ["xy"]
+        },
+    "timeRoadConn" :
+        {
+            "avg": ['avg', 'cdf'],
+            ("time", "avg"): ["xy"]
         }
 }
 
@@ -59,7 +69,9 @@ FILES= {
     "agentInstConn" : ["id","avg","std","max","min"],
     "roadConn" : ["id", "connect"],
     "roadInstConn" : ["id","avg","std","max","min"],
-    "time": ["id","entry","exit","time"]
+    "time": ["id","entry","exit","time"],
+    "timeAgentConn":["time", "avg", "std", "max", "min"],
+    "timeRoadConn" : ["time", "avg", "std", "max", "min"]
 }
 
 NAME_MAP= {
@@ -70,6 +82,8 @@ NAME_MAP= {
     "roadInstConn" : "roadSegmentInstantConnections.csv",
     "speed" : "speed.csv",
     "time" : "time.csv",
+    "timeAgentConn" : "timeAgentsInstantConnections.csv",
+    "timeRoadConn" : "timeSegmentInstantConnections.csv"
     }
 
 class CsvReader():
@@ -97,6 +111,9 @@ class _FuncHelper(type):
     import numpy as np
     np = np
 
+    ARRAY_FUNCS = ['hist', 'cdf', 'xy']
+    TUPLE_FUNCS = ['xy']
+
     @classmethod
     def cdf(cls, data):
         s = cls.np.sort(data)
@@ -110,6 +127,11 @@ class _FuncHelper(type):
         hist, bin_edges = cls.np.histogram(data, HIST_PARAMS['nbins'])
         return cls.np.array([bin_edges, hist])
 
+    @classmethod
+    def xy(cls, data):
+        x, y = data
+        return cls.np.array([x, y])
+
     FUNC_MAP = {
         "avg": np.average,
         "min": np.min,
@@ -117,7 +139,8 @@ class _FuncHelper(type):
         "hist": hist,
         "sum": np.sum,
         "cdf": cdf,
-        "std": np.std
+        "std": np.std,
+        "xy" : xy
     }
 
     def __getattr__(cls, item):
@@ -240,8 +263,12 @@ def db_prepare_results(results):
     for var, dvar in EXP_RESULTS.iteritems():
         for col, funcs in dvar.iteritems():
             for func in funcs:
-                colname = exp_res_to_colname(var, col, func)
-                if func == "hist" or func == "cdf":
+                if func in FuncHelper.TUPLE_FUNCS:
+                    cname = "_".join(col)
+                else:
+                    cname = col
+                colname = exp_res_to_colname(var, cname, func)
+                if func in FuncHelper.ARRAY_FUNCS:
                     type = TypeHelper.CUSTOM_ARRAY
                 else:
                     type = TypeHelper.SQLITE_FLOAT
@@ -335,7 +362,15 @@ def makeResults(params, scenario, data):
     for name, values in data.iteritems():
         for col, funcs in EXP_RESULTS[name].iteritems():
             for func in funcs:
-                dt[exp_res_to_colname(name, col, func)] = getattr(FuncHelper, func)(values.getColumn(col))
+                #tuple of columns for xy
+                if func in FuncHelper.TUPLE_FUNCS:
+                    r = getattr(FuncHelper, func)((values.getColumn(c) for c in col))
+                    cname = "_".join(col)
+                else:
+                    r = getattr(FuncHelper, func)(values.getColumn(col))
+                    cname = col
+
+                dt[exp_res_to_colname(name, cname, func)] = r
     # print dt
     return dict(params.items()+dt.items()+scenario.items())
 
@@ -527,7 +562,7 @@ class GraphBackend(object):
         # clsbbox_extra_artists = (lgd,), bbox_inches = 'tight')
 
     @classmethod
-    def make(cls, figure, x, y, yerr = None,legend = None):
+    def make(cls, figure, x, y, yerr = None, legend = None):
         if legend is not None:
             cls.errorbar(x, y, yerr = yerr, label = legend)
         else:
@@ -748,10 +783,10 @@ class Graph(object):
 
 
     @classmethod
-    def _query(cls, x = None, y = None, parameters = None, filtering = None):
+    def _query(cls, x = None, y = None, parameters = None, filtering = None, distinct = False):
         #query db to get n-d array to plot
         query = cls.QueryBuilder('experiments')
-        # query.distinct = True
+        query.distinct = distinct
         # query.select(y)
         query.ands(x)
         query.ands(y)
@@ -787,14 +822,14 @@ class Graph(object):
         cmap, data = cls._query(x = x, y = y, parameters = parameters, filtering = filtering)
         data = np.transpose(np.array(data))
         for ax in x.iterkeys():
-            dt = Graph.sort(data, row = cmap[ax])
-            if len(dt) == 0:
+            # dt = Graph.sort(data, row = cmap[ax])
+            if len(data) == 0:
                 print "!!! No data found... skipping !!!\n"
                 return
 
             # datax = dt[cmap[ax]]
             for ay in y.iterkeys():
-                px, py, pstdy = cls.mergeAlong(dt, rowalong = cmap[ax], what = cmap[ay])
+                px, py, pstdy = cls.mergeAlong(data, rowalong = cmap[ax], what = cmap[ay])
                 cls.backend.make(fig, px, py, yerr = pstdy, legend = cls.wrapLegend(ay))
                 # cls.backend.make(fig, datax, data[cmap[ay]], legend = cls.wrapLegend(ay))
                 cls.backend.decorate(g_xlabel = ax,
@@ -811,18 +846,19 @@ class Graph(object):
     @classmethod
     def mergeAlong(cls, data, rowalong, what):
         datax = data[rowalong]
-        from collections import OrderedDict
-        tmpData = OrderedDict()
+        # from collections import OrderedDict
+        tmpData = {}
         for i, x in np.ndenumerate(datax):
             if tmpData.has_key(x):
                 tmpData[x].append(data[what][i])
             else:
                 tmpData[x] = [data[what][i]]
-        tmpx = np.array(tmpData.keys())
+        tmpx = np.array(tmpData.keys(), dtype=float)
         vals = [np.array(v, dtype = float) for v in tmpData.values()]
         tmpy = np.array([np.mean(v) for v in vals])
         tmpstd = np.array([np.std(v) for v in vals])
-        return tmpx, tmpy, tmpstd
+        d = Graph.sort(np.array([tmpx, tmpy, tmpstd]), row = 0)
+        return d[0], d[1], d[2]
 
     @classmethod
     def cdfs(cls, document = None, x = None, y = None, parameters = None, filtering = None):
@@ -836,14 +872,16 @@ class Graph(object):
         :return:
         """
         # query db
-        cmap, d = cls._query(x = x, y = y, parameters = parameters, filtering = filtering)
+        cmap, d = cls._query(x = x, y = y, parameters = parameters, filtering = filtering, distinct = True)
+        print d
         for ax in x.iterkeys():
             for ay in y.iterkeys():
                 fig = cls.backend.newFigure()
                 for res in d:
                     leg = str(res[cmap[ax]])
                     data = res[cmap[ay]]
-                    cls.backend.make(fig, x=data[0], y=data[1], legend = cls.wrapLegend(ax+"="+leg))
+                    if data is not None:
+                        cls.backend.make(fig, x=data[0], y=data[1], legend = cls.wrapLegend(ax+"="+leg))
                 cls.backend.decorate(g_xlabel = "",
                                      g_ylabel = "cdf",
                                      g_ygrid = True,
@@ -902,6 +940,12 @@ class Graph(object):
 
     @classmethod
     def connections(cls, fi, x,filtering):
+        Graph.xy(fi,
+                 x = {x: None},
+                 y = {exp_res_to_colname("agentInstConn", "avg", "avg"): None},
+                 parameters = {},
+                 filtering = filtering)
+
         Graph.cdfs(fi,
                    x = {x: None},
                    y = {exp_res_to_colname("agentInstConn", "avg", "cdf"): None},
@@ -920,17 +964,23 @@ class Graph(object):
                  parameters = {},
                  filtering = filtering)
 
-        Graph.cdfs(fi,
-                   x = {x: None},
-                   y = {exp_res_to_colname("agentInstConn", "avg", "cdf"): None},
-                   parameters = {},
-                   filtering = filtering)
-
         Graph.xy(fi,
                  x = {x: None},
                  y = {exp_res_to_colname("roadConn", "connect", "sum"): None},
                  parameters = {},
                  filtering = filtering)
+
+        Graph.cdfs(fi,
+                   x = {x:None},
+                   y = {exp_res_to_colname("timeAgentConn", "time_avg", "xy"): None},
+                   parameters = {},
+                   filtering = filtering)
+
+        Graph.cdfs(fi,
+                   x = {x: None},
+                   y = {exp_res_to_colname("timeRoadConn", "time_avg", "xy"): None},
+                   parameters = {},
+                   filtering = filtering)
 
 
 def makeGraphs(output_dir):
@@ -942,7 +992,7 @@ def makeGraphs(output_dir):
                           # "roadsegments.trafficjam.speed-limit.factor" : 0.8,
                           "roadsegments.trafficjam.jamfactor" : 0.1,
                           "optimize.anticipation.position.seconds" : 1,
-                          "roadsegments.trafficjam.speed-limit.distance" : 1000
+                          "agent.trafficjam.speed-limit.distance" : 1000
                       }
     )
     Graph.backend.close(speed)
@@ -953,7 +1003,7 @@ def makeGraphs(output_dir):
                           "roadsegments.trafficjam.speed-limit.factor": 0.8,
                           # "roadsegments.trafficjam.jamfactor": 0.1,
                           "optimize.anticipation.position.seconds": 1,
-                          "roadsegments.trafficjam.speed-limit.distance": 1000
+                          "agent.trafficjam.speed-limit.distance": 1000
                       }
     )
     Graph.backend.close(jamFact)
@@ -964,7 +1014,7 @@ def makeGraphs(output_dir):
                           "roadsegments.trafficjam.speed-limit.factor": 0.8,
                           "roadsegments.trafficjam.jamfactor": 0.1,
                           "optimize.anticipation.speed.seconds": 1,
-                          # "roadsegments.trafficjam.speed-limit.distance": 1000
+                          # "agent.trafficjam.speed-limit.distance": 1000
                       }
     )
     Graph.backend.close(distance)
@@ -975,7 +1025,7 @@ def makeGraphs(output_dir):
                           "roadsegments.trafficjam.speed-limit.factor": 0.8,
                           "roadsegments.trafficjam.jamfactor": 0.1,
                           # "optimize.anticipation.position.seconds": 1,
-                          "roadsegments.trafficjam.speed-limit.distance": 1000
+                          "agent.trafficjam.speed-limit.distance": 1000
                       }
     )
     Graph.backend.close(anticipation)
