@@ -138,14 +138,14 @@ public class AggregationHelper {
 					throw new NullPointerException();
 				double d1 = eulerDistance(
 						o1.latitude + o1.direction.getLatitudeProjection(o1.speed) * ANTICIPATION_SECONDS
-						+ o1.direction.getLatitudeProjection(o1.acc) * ANTICIPATION_SECONDS * ANTICIPATION_SECONDS,
+						+ o1.direction.getLatitudeProjection(o1.acc) / 2.0 * ANTICIPATION_SECONDS * ANTICIPATION_SECONDS,
 						o1.longitude + o1.direction.getLongitudeProjection(o1.speed) * ANTICIPATION_SECONDS
-						+ o1.direction.getLongitudeProjection(o1.acc) * ANTICIPATION_SECONDS * ANTICIPATION_SECONDS);
+						+ o1.direction.getLongitudeProjection(o1.acc) / 2.0 * ANTICIPATION_SECONDS * ANTICIPATION_SECONDS);
 				double d2 = eulerDistance(
 						o2.latitude + o2.direction.getLatitudeProjection(o2.speed) * ANTICIPATION_SECONDS
-						+ o2.direction.getLatitudeProjection(o2.acc) * ANTICIPATION_SECONDS * ANTICIPATION_SECONDS,
+						+ o2.direction.getLatitudeProjection(o2.acc) / 2.0 * ANTICIPATION_SECONDS * ANTICIPATION_SECONDS,
 						o2.longitude + o2.direction.getLongitudeProjection(o2.speed) * ANTICIPATION_SECONDS
-						+ o2.direction.getLongitudeProjection(o2.acc) * ANTICIPATION_SECONDS * ANTICIPATION_SECONDS);
+						+ o2.direction.getLongitudeProjection(o2.acc) / 2.0 * ANTICIPATION_SECONDS * ANTICIPATION_SECONDS);
 				return Double.compare(d1, d2);
 			}
 

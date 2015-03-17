@@ -8,15 +8,15 @@ import fr.netixx.AutoTopo.notifications.IPullNotification;
 
 public class Aggregation implements IPullNotification {
 
-	double speed;
-	double acc;
+	final double speed;
+	final double acc;
 	public final IDirection direction;
-	double totalArea;
-	double latitude, longitude;
-	double maxlatitude, maxlongitude, minlatitude, minlongitude;
-	double barycentricLatitude, barycentricLongitude;
-	int aggregationSize;
-	double time;
+	final double totalArea;
+	final double latitude, longitude;
+	final double maxlatitude, maxlongitude, minlatitude, minlongitude;
+	final double barycentricLatitude, barycentricLongitude;
+	final int aggregationSize;
+	final double time;
 
 	/**
 	 * Constructor for single Agent
@@ -102,7 +102,19 @@ public class Aggregation implements IPullNotification {
 
 	public Aggregation() {
 		this.direction = null;
+		this.speed = 0;
+		this.acc = 0;
+		this.totalArea = 0;
+		this.latitude = 0;
+		this.longitude = 0;
+		this.minlatitude = 0;
+		this.maxlatitude = 0;
+		this.minlongitude = 0;
+		this.maxlongitude = 0;
+		this.barycentricLatitude = 0;
+		this.barycentricLongitude = 0;
 		this.aggregationSize = 0;
+		this.time = 0;
 	}
 
 	public static Aggregation aggregate(Iterable<Aggregation> aggregates) {

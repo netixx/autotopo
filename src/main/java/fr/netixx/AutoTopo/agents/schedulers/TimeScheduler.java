@@ -19,12 +19,16 @@ public class TimeScheduler implements IScheduler {
 	@Override
 	public boolean shouldRun() {
 		if ((clock.getTime() - lastTick) > timeInterval) {
-			this.lastTick = clock.getTime();
+
 			return true;
 		}
 		return false;
 	}
 
+	@Override
+	public void reset() {
+		this.lastTick = clock.getTime();
+	}
 
 
 }

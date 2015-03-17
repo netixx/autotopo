@@ -23,7 +23,10 @@ public class Clock implements IClock {
 
 	@Override
 	public double getTime() {
-		return clockValue + generator.nextGaussian() * variance;
+		if (variance > 0)
+			return clockValue + generator.nextGaussian() * variance;
+		else
+			return clockValue;
 	}
 
 	void setClock(double time) {

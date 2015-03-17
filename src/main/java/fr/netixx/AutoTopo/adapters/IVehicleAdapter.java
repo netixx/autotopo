@@ -16,8 +16,6 @@ public interface IVehicleAdapter {
 
 	public void setIsLeader(boolean isLeader);
 
-	public void setAutoTopoId(int id);
-
 	public int getLane();
 
 	public void changeRoute(String routeName);

@@ -19,10 +19,14 @@ public class EventScheduler implements IScheduler {
 	@Override
 	public boolean shouldRun() {
 		if ((counter.getEvents() - lastCounter >= nEventsTrigger)) {
-			lastCounter = counter.getEvents();
 			return true;
 		}
 		return false;
+	}
+
+	@Override
+	public void reset() {
+		lastCounter = counter.getEvents();
 	}
 
 }

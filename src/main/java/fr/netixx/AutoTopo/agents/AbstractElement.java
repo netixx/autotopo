@@ -136,11 +136,16 @@ public abstract class AbstractElement<Child extends IElement> implements IElemen
 		}
 
 		for (IScheduler sched : getSchedulers()) {
-			// make sure each scheduler gets tested because reset occurs while
-			// testing
-			if (sched.shouldRun() && !ran) {
+			// take the min of schedulers
+			if (!ran && sched.shouldRun()) {
 				manageTopology();
 				ran = true;
+			}
+		}
+		// reset to take next min once action has been performed
+		if (ran) {
+			for (IScheduler sched : getSchedulers()) {
+				sched.reset();
 			}
 		}
 	}

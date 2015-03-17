@@ -42,10 +42,11 @@ public class Settings {
 	public static final String ROADSEGMENTS_TRAFFICJAM_ENABLED = "roadsegments.trafficjam.enabled";
 	public static final String ROADSEGMENTS_TRAFFICJAM_JAMFACTOR = "roadsegments.trafficjam.jamfactor";
 	public static final String ROADSEGMENTS_TRAFFICJAM_SPEED_FACTOR = "roadsegments.trafficjam.speed-limit.factor";
-	public static final String ROADSEGMENTS_TRAFFICJAM_SPEED_DISTANCE = "roadsegments.trafficjam.speed-limit.distance";
+	public static final String AGENT_TRAFFICJAM_SPEED_DISTANCE = "agent.trafficjam.speed-limit.distance";
 
 	public static final String OPTIMIZE_AGENT_RECENTER_LEADER_ENABLED = "optimize.agent.recenter-leader.enabled";
 	public static final String OPTIMIZE_AGENT_RECENTER_LEADER_BIAS = "optimize.agent.recenter-leader.bias";
+	public static final String OPTIMIZE_AGENT_RECENTER_LEADER_PERIOD = "optimize.agent.recenter-leader.period";
 	public static final String OPTIMIZE_ROADSEGMENT_SPEED_CLUSTERING_ENABLED = "optimize.roadsegment.speed-clustering.enabled";
 	public static final String OPTIMIZE_ROADSEGMENT_SPEED_CLUSTERING_FACTOR = "optimize.roadsegment.speed-clustering.factor";
 

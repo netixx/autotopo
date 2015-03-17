@@ -10,6 +10,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import fr.netixx.AutoTopo.Controller;
+import fr.netixx.AutoTopo.adapters.IAgent;
 import fr.netixx.AutoTopo.adapters.IController;
 import fr.netixx.AutoTopo.adapters.IVehicleAdapter;
 import fr.netixx.AutoTopo.adapters.io.IEntryPoint;
@@ -22,8 +23,8 @@ import fr.netixx.AutoTopo.agents.factories.ElementFactory;
 import fr.netixx.AutoTopo.notifications.aggregation.Aggregation;
 import fr.netixx.AutoTopo.notifications.goals.AccelerationGoal;
 import fr.netixx.AutoTopo.notifications.goals.LaneChangeGoal;
-import fr.netixx.AutoTopo.notifications.goals.SpeedGoal;
 import fr.netixx.AutoTopo.statistics.MergedInstantConnections;
+import fr.netixx.AutoTopo.statistics.TimeInstantConnections;
 
 public class AutoTopoMovsimController implements IController {
 
@@ -44,10 +45,11 @@ public class AutoTopoMovsimController implements IController {
 	}
 
 
-	public void addVehicle(IVehicleAdapter vh) {
+	public IAgent addVehicle(IVehicleAdapter vh) {
 		Agent e = ElementFactory.newAgent(entryPoint, vh, movsimClock);
 		entryPoint.insertElement(e);
 		linktable.put(vh, e);
+		return e;
 	}
 
 	public void removeVehicle(IVehicleAdapter vh) {
@@ -135,14 +137,20 @@ public class AutoTopoMovsimController implements IController {
 	private MergedInstantConnections agentInstConnections = new MergedInstantConnections("agentsInstantConnections");
 	private MergedInstantConnections coordInstConnections = new MergedInstantConnections("roadSegmentInstantConnections");
 
+	private TimeInstantConnections timeAgentInstConnections = new TimeInstantConnections("timeAgentsInstantConnections");
+	private TimeInstantConnections timeSegmentInstConnections = new TimeInstantConnections("timeSegmentInstantConnections");
+
 	public void monitorStatistics() {
+		double time = movsimClock.getTime();
 		for (Agent a : linktable.values()) {
 			if (a.isLeader()) {
 				agentInstConnections.record(a, a.getChildrenSize());
+				timeAgentInstConnections.record(time, a.getChildrenSize());
 			}
 		}
 		for (RoadSegmentCoordinator r : roadSegments) {
 			coordInstConnections.record(r, r.getChildrenSize());
+			timeSegmentInstConnections.record(time, r.getChildrenSize());
 		}
 	}
 
@@ -162,18 +170,21 @@ public class AutoTopoMovsimController implements IController {
 		return agent.getGoalAcceleration();
 	}
 
-	public SpeedGoal getSpeedGoal(IVehicleAdapter me) {
-		Agent agent = linktable.get(me);
-		if (agent == null) {
-			return null;
-		}
-		return agent.getGoalSpeed();
-	}
+	// public SpeedGoal getSpeedGoal(IVehicleAdapter me) {
+	// Agent agent = linktable.get(me);
+	// if (agent == null) {
+	// return null;
+	// }
+	// return agent.getGoalSpeed();
+	// }
 
-	public void writeStats() {
-		Controller.writeDefaultCsvs();
-		Controller.writeCsv(agentInstConnections);
-		Controller.writeCsv(coordInstConnections);
+	public void writeStats(String path) {
+		Controller.writeDefaultCsvs(path);
+		Controller.writeCsv(path, agentInstConnections);
+		Controller.writeCsv(path, coordInstConnections);
+
+		Controller.writeCsv(path, timeAgentInstConnections);
+		Controller.writeCsv(path, timeSegmentInstConnections);
 	}
 	// public static void initialize(IRoadAdapter road) {
 	// int segmentNumber = 1;

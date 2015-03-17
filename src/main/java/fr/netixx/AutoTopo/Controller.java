@@ -88,12 +88,13 @@ public class Controller implements IController {
 		return p;
 	}
 
-	public static void writeDefaultCsvs() {
-		writeCsv(ConnectionManagerFactory.agentConnections);
-		writeCsv(ConnectionManagerFactory.roadSegmentConnections);
+	public static void writeDefaultCsvs(String output) {
+		writeCsv(output, ConnectionManagerFactory.agentConnections);
+		writeCsv(output, ConnectionManagerFactory.roadSegmentConnections);
+
 	}
 
-	public static void writeCsv(IStatistic stat) {
-		stat.toCsv(Paths.get(parser.csvDirPath, stat.getName() + ".csv"));
+	public static void writeCsv(String output, IStatistic stat) {
+		stat.toCsv(Paths.get(output, stat.getName() + ".csv"));
 	}
 }

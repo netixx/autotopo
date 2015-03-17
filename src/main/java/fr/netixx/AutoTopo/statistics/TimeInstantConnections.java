@@ -6,29 +6,28 @@ import java.nio.charset.Charset;
 import java.nio.file.Files;
 import java.nio.file.OpenOption;
 import java.nio.file.Path;
-import java.util.HashMap;
-import java.util.Map;
 import java.util.Map.Entry;
+import java.util.SortedMap;
+import java.util.TreeMap;
 
 import au.com.bytecode.opencsv.CSVWriter;
-import fr.netixx.AutoTopo.agents.IElement;
 
-public class MergedInstantConnections extends AbstractStatistic {
+public class TimeInstantConnections extends AbstractStatistic {
 
 	private static boolean enabled = true;
 
-	private Map<IElement, ConnectionsRecorder> connectionMap = new HashMap<>();
+	private SortedMap<Double, ConnectionsRecorder> connectionMap = new TreeMap<>();
 
-	public MergedInstantConnections(String name) {
-		super(name, new String[] { "id", "avg", "std", "max", "min" });
+	public TimeInstantConnections(String name) {
+		super(name, new String[] { "time", "avg", "std", "max", "min" });
 	}
 
-	public void record(IElement el, int nConnections) {
+	public void record(Double time, int nConnections) {
 		if (enabled && nConnections > 0) {
-			if (!connectionMap.containsKey(el)) {
-				connectionMap.put(el, new ConnectionsRecorder(nConnections));
+			if (!connectionMap.containsKey(time)) {
+				connectionMap.put(time, new ConnectionsRecorder(nConnections));
 			} else {
-				connectionMap.get(el).recordConnectionNumber(nConnections);
+				connectionMap.get(time).recordConnectionNumber(nConnections);
 			}
 		}
 
@@ -44,13 +43,12 @@ public class MergedInstantConnections extends AbstractStatistic {
 			CSVWriter csvW = new CSVWriter(writer, ';');
 
 			csvW.writeNext(this.getHeader());
-			for (Entry<IElement, ConnectionsRecorder> entry : connectionMap.entrySet()) {
-				csvW.writeNext(new String[] { "" + entry.getKey().getId(), "" + entry.getValue().getAvg(), "" + entry.getValue().getStd(),
+			for (Entry<Double, ConnectionsRecorder> entry : connectionMap.entrySet()) {
+				csvW.writeNext(new String[] { "" + entry.getKey(), "" + entry.getValue().getAvg(), "" + entry.getValue().getStd(),
 						"" + entry.getValue().getMax(), "" + entry.getValue().getMin() });
 			}
 			csvW.close();
 		} catch (IOException e) {
-			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
 

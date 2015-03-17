@@ -12,11 +12,13 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import fr.netixx.AutoTopo.Settings;
+import fr.netixx.AutoTopo.adapters.IAgent;
 import fr.netixx.AutoTopo.adapters.IClock;
 import fr.netixx.AutoTopo.adapters.IVehicleAdapter;
 import fr.netixx.AutoTopo.adapters.io.IExitPoint;
 import fr.netixx.AutoTopo.agents.factories.ChildrenStructureFactory;
 import fr.netixx.AutoTopo.agents.factories.ConnectionManagerFactory;
+import fr.netixx.AutoTopo.agents.schedulers.TimeScheduler;
 import fr.netixx.AutoTopo.helpers.ClockCachedObject;
 import fr.netixx.AutoTopo.notifications.IPullNotification;
 import fr.netixx.AutoTopo.notifications.IPushNotification;
@@ -29,7 +31,7 @@ import fr.netixx.AutoTopo.notifications.goals.LaneChangeGoal;
 import fr.netixx.AutoTopo.notifications.goals.SpeedGoal;
 
 
-public class Agent extends AbstractElement<Agent> implements IElement, IExitPoint<Agent> {
+public class Agent extends AbstractElement<Agent> implements IElement, IExitPoint<Agent>, IAgent {
 
 	private static final int MAX_LINK_DISTANCE = Settings.getInt(Settings.MAX_VEHICLE_CONNECTIONS_DISTANCE);
 	private static final int MAX_LINK_DISTANCE_THRESHOLD = MAX_LINK_DISTANCE + Settings.getInt(Settings.MAX_VEHICLE_CONNECTIONS_DISTANCE_THRESHOLD);
@@ -37,14 +39,16 @@ public class Agent extends AbstractElement<Agent> implements IElement, IExitPoin
 	private static final int MAX_SCOPE_NUMBER_THRESHOLD = MAX_SCOPE_NUMBER + Settings.getInt(Settings.MAX_SCOPE_NUMBER_THRESHOLD);
 	private static final boolean RECENTER_LEADER = Settings.getBoolean(Settings.OPTIMIZE_AGENT_RECENTER_LEADER_ENABLED);
 	private static final double RECENTER_LEADER_BIAS = Settings.getDouble(Settings.OPTIMIZE_AGENT_RECENTER_LEADER_BIAS);
+	private static final double RECENTER_LEADER_PERIOD = Settings.getDouble(Settings.OPTIMIZE_AGENT_RECENTER_LEADER_PERIOD);
 
-	private static final double TRAFFICJAM_DISTANCE_WARN = Settings.getDouble(Settings.ROADSEGMENTS_TRAFFICJAM_SPEED_DISTANCE);
+	private static final double TRAFFICJAM_DISTANCE_WARN = Settings.getDouble(Settings.AGENT_TRAFFICJAM_SPEED_DISTANCE);
 
 	private static Logger logger = LogManager.getLogger();
 
 	private IScope scope = null;
 	private final IVehicleAdapter vh;
 	private ClockCachedObject<Aggregation> selfAggregate;
+	private TimeScheduler recenterScheduler;
 
 
 	private static int nextId = 0;
@@ -110,7 +114,6 @@ public class Agent extends AbstractElement<Agent> implements IElement, IExitPoin
 		setScope(new Scope());
 		setLeader(true);
 		// TODO : change
-		vh.setAutoTopoId(this.id);
 		this.connectionManager = ConnectionManagerFactory.newAgentConnectionManager(this, ChildrenStructureFactory.newChildrenLeader(),
 				getEventsCounter());
 		selfAggregate = new ClockCachedObject<Aggregation>(clock) {
@@ -121,6 +124,8 @@ public class Agent extends AbstractElement<Agent> implements IElement, IExitPoin
 			}
 
 		};
+
+		recenterScheduler = new TimeScheduler(RECENTER_LEADER_PERIOD, clock);
 
 	}
 
@@ -361,7 +366,7 @@ public class Agent extends AbstractElement<Agent> implements IElement, IExitPoin
 	@Override
 	public void optimizeTopology() {
 		// here move leader closer to center of gravity if possible
-		if (isLeader() && RECENTER_LEADER && hasChildren()) {
+		if (RECENTER_LEADER && recenterScheduler.shouldRun() && isLeader() && hasChildren()) {
 			Aggregation mean = getAggregate();
 			SortedMap<Aggregation, Agent> candidates = new TreeMap<>(AggregationHelper.createDistanceAndSpeedAggregationComparator());
 			for (Agent a : getConnectionManager().getConnectedChildren()) {
@@ -374,6 +379,7 @@ public class Agent extends AbstractElement<Agent> implements IElement, IExitPoin
 				Agent newLeader = candidates.get(candidates.firstKey());
 				this.swapLeader(newLeader);
 			}
+			recenterScheduler.reset();
 		}
 
 	}
@@ -497,6 +503,7 @@ public class Agent extends AbstractElement<Agent> implements IElement, IExitPoin
 
 	}
 
+	@Override
 	public LaneChangeGoal getGoalLaneChange() {
 		return LaneChangeGoal.FREE;
 		// TODO: decide wrt goals
@@ -524,6 +531,7 @@ public class Agent extends AbstractElement<Agent> implements IElement, IExitPoin
 		return AccelerationGoal.FREE;
 	}
 
+	@Override
 	public SpeedGoal getGoalSpeed() {
 		return targetSpeed;
 	}
@@ -558,5 +566,10 @@ public class Agent extends AbstractElement<Agent> implements IElement, IExitPoin
 
 		return true;
 
+	}
+
+	@Override
+	public int getScopeId() {
+		return this.getScope().getId();
 	}
 }
