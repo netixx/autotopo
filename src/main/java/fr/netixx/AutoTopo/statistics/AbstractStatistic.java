@@ -5,6 +5,10 @@ abstract class AbstractStatistic implements IStatistic {
 	protected String name;
 	protected String[] header;
 
+	protected AbstractStatistic(String name) {
+		this.name = name;
+	}
+
 	protected AbstractStatistic(String name, String[] header) {
 		this.name = name;
 		this.header = header;

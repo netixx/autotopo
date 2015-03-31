@@ -45,10 +45,10 @@ public class Controller implements IController {
 	private static class CmdParser {
 
 		@Option(name = "--config", aliases = "-c", usage = "Path to the properties file", metaVar = "PROPS_FILE", required = false)
-		private final String propertiesFilePath = "autotopo-config.properties";
+		private String propertiesFilePath = "autotopo-config.properties";
 
 		@Option(name = "--csv", usage = "Path to the csv output dir", metaVar = "CSV_FILE", required = false)
-		private final String csvDirPath = "output";
+		private String csvDirPath = "output";
 
 		public void doParse(final String[] args) {
 			final CmdLineParser parser = new CmdLineParser(this);
@@ -72,10 +72,10 @@ public class Controller implements IController {
 		int entrypoint = Settings.getInt(Settings.ROADSEGMENTS_INSTANCES_START);
 		int cur = entrypoint;
 		do {
-			int next = Settings.getInt(Settings.ROADSEGMENTS_INSTANCES_PREFIX + cur + Settings.ROADSEGMENTS_INSTANCES_NEXT);
+			int next = Settings.getInt(String.format(Settings.ROADSEGMENTS_INSTANCES_NEXT, cur));
 			double end = 0;
 			if (next != 0) {
-				end = Settings.getDouble(Settings.ROADSEGMENTS_INSTANCES_PREFIX + cur + Settings.ROADSEGMENTS_INSTANCES_END);
+				end = Settings.getDouble(String.format(Settings.ROADSEGMENTS_INSTANCES_END, cur));
 			}
 			RoadSegmentCoordinator roadSegment = ElementFactory.newRoadSegmentCoordinator(root, cur, next, end, clock);
 			Resolver.getRoadCoordinator(root).connect(roadSegment);
@@ -86,6 +86,12 @@ public class Controller implements IController {
 		} while (cur != 0);
 
 		return p;
+	}
+
+	public static boolean shouldLogRoadSegment(int id) {
+		String k = String.format(Settings.STATISTICS_ROADSEGMENT_LOG_PREFIX, id);
+		return Settings.hasKey(k) && Settings.getBoolean(k);
+
 	}
 
 	public static void writeDefaultCsvs(String output) {

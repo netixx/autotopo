@@ -2,6 +2,7 @@ package fr.netixx.AutoTopo.agents.factories;
 
 import java.util.Collection;
 
+import fr.netixx.AutoTopo.Controller;
 import fr.netixx.AutoTopo.agents.Agent;
 import fr.netixx.AutoTopo.agents.ConnectionManager;
 import fr.netixx.AutoTopo.agents.IEventsCounter;
@@ -23,8 +24,9 @@ public class ConnectionManagerFactory {
 			IEventsCounter eventsCounter) {
 
 		ConnectionManager<Agent> conn = new ConnectionManager<Agent>(children, eventsCounter);
-
-		roadSegmentConnections.record(el, eventsCounter);
+		if (Controller.shouldLogRoadSegment(el.getId()))
+			roadSegmentConnections.record(el, eventsCounter);
 		return conn;
 	}
+
 }

@@ -24,6 +24,7 @@ import fr.netixx.AutoTopo.notifications.aggregation.Aggregation;
 import fr.netixx.AutoTopo.notifications.goals.AccelerationGoal;
 import fr.netixx.AutoTopo.notifications.goals.LaneChangeGoal;
 import fr.netixx.AutoTopo.statistics.MergedInstantConnections;
+import fr.netixx.AutoTopo.statistics.RecordFilter;
 import fr.netixx.AutoTopo.statistics.TimeInstantConnections;
 
 public class AutoTopoMovsimController implements IController {
@@ -36,8 +37,8 @@ public class AutoTopoMovsimController implements IController {
 
 	private Clock movsimClock = new Clock();
 
-	public AutoTopoMovsimController() {
-		Controller.initialize(null);
+	public AutoTopoMovsimController(String[] opts) {
+		Controller.initialize(opts);
 		RoadCoordinator rootRoad = Controller.readCoordinators(movsimClock);
 		entryPoint = Controller.readSegments(rootRoad, movsimClock);
 		root = rootRoad;
@@ -134,23 +135,42 @@ public class AutoTopoMovsimController implements IController {
 		return parent == root;
 	}
 
-	private MergedInstantConnections agentInstConnections = new MergedInstantConnections("agentsInstantConnections");
-	private MergedInstantConnections coordInstConnections = new MergedInstantConnections("roadSegmentInstantConnections");
+	static RecordFilter<Agent> agentFilter = new RecordFilter<Agent>() {
 
-	private TimeInstantConnections timeAgentInstConnections = new TimeInstantConnections("timeAgentsInstantConnections");
-	private TimeInstantConnections timeSegmentInstConnections = new TimeInstantConnections("timeSegmentInstantConnections");
+		@Override
+		public boolean filter(Agent el) {
+			return !el.isLeader();
+		}
+
+	};
+
+	static RecordFilter<RoadSegmentCoordinator> roadSegmentFilter = new RecordFilter<RoadSegmentCoordinator>() {
+
+		@Override
+		public boolean filter(RoadSegmentCoordinator el) {
+			return !Controller.shouldLogRoadSegment(el.getId());
+		}
+	};
+
+	private MergedInstantConnections<Agent> agentInstConnections = new MergedInstantConnections<>("agentsInstantConnections", agentFilter);
+	private MergedInstantConnections<RoadSegmentCoordinator> coordInstConnections = new MergedInstantConnections<>("roadSegmentInstantConnections",
+			roadSegmentFilter);
+
+	private TimeInstantConnections<Agent> timeAgentInstConnections = new TimeInstantConnections<>("timeAgentsInstantConnections", agentFilter);
+	private TimeInstantConnections<RoadSegmentCoordinator> timeSegmentInstConnections = new TimeInstantConnections<>("timeSegmentInstantConnections",
+			roadSegmentFilter);
 
 	public void monitorStatistics() {
 		double time = movsimClock.getTime();
 		for (Agent a : linktable.values()) {
 			if (a.isLeader()) {
 				agentInstConnections.record(a, a.getChildrenSize());
-				timeAgentInstConnections.record(time, a.getChildrenSize());
+				timeAgentInstConnections.record(time, a, a.getChildrenSize());
 			}
 		}
 		for (RoadSegmentCoordinator r : roadSegments) {
 			coordInstConnections.record(r, r.getChildrenSize());
-			timeSegmentInstConnections.record(time, r.getChildrenSize());
+			timeSegmentInstConnections.record(time, r, r.getChildrenSize());
 		}
 	}
 

@@ -13,18 +13,28 @@ import java.util.Map.Entry;
 import au.com.bytecode.opencsv.CSVWriter;
 import fr.netixx.AutoTopo.agents.IElement;
 
-public class MergedInstantConnections extends AbstractStatistic {
+public class MergedInstantConnections<X extends IElement> extends AbstractStatistic {
+
+	private static final String[] headers = new String[] { "id", "avg", "std", "max", "min" };
 
 	private static boolean enabled = true;
 
 	private Map<IElement, ConnectionsRecorder> connectionMap = new HashMap<>();
+	private RecordFilter<X> filter = null;
 
 	public MergedInstantConnections(String name) {
-		super(name, new String[] { "id", "avg", "std", "max", "min" });
+		super(name, headers);
 	}
 
-	public void record(IElement el, int nConnections) {
-		if (enabled && nConnections > 0) {
+	public MergedInstantConnections(String name, RecordFilter<X> filter) {
+		super(name, headers);
+		this.filter = filter;
+	}
+
+	public void record(X el, int nConnections) {
+		if (enabled) {
+			if (filter != null && filter.filter(el))
+				return;
 			if (!connectionMap.containsKey(el)) {
 				connectionMap.put(el, new ConnectionsRecorder(nConnections));
 			} else {

@@ -26,4 +26,6 @@ public interface IVehicleAdapter {
 
 	public IDirection getDirection();
 
+	public double getCurvAbsc();
+
 }

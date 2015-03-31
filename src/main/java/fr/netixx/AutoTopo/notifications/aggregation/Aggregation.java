@@ -17,6 +17,8 @@ public class Aggregation implements IPullNotification {
 	final double barycentricLatitude, barycentricLongitude;
 	final int aggregationSize;
 	final double time;
+	final double curvAbsc;
+	final double minCurvAbsc, maxCurvAbsc;
 
 	/**
 	 * Constructor for single Agent
@@ -39,6 +41,7 @@ public class Aggregation implements IPullNotification {
 			double latitude, double longitude,
 			double barycentricLatitude,
 			double barycentricLongitude,
+			double curvAbsc,
 			int aggregationSize, double time) {
 
 		this.speed = speed;
@@ -53,6 +56,9 @@ public class Aggregation implements IPullNotification {
 		this.maxlongitude = longitude;
 		this.barycentricLatitude = barycentricLatitude;
 		this.barycentricLongitude = barycentricLongitude;
+		this.curvAbsc = curvAbsc;
+		this.minCurvAbsc = curvAbsc;
+		this.maxCurvAbsc = curvAbsc;
 		this.aggregationSize = aggregationSize;
 		this.time = time;
 	}
@@ -82,6 +88,7 @@ public class Aggregation implements IPullNotification {
 			double latitude, double longitude, double minlatitude,
 			double minlongitude, double maxlatitude, double maxlongitude,
 			double barycentricLatitude, double barycentricLongitude,
+			double curvAvsc, double minCurvAbsc, double maxCurvAbsc,
 			int aggregationSize, double time) {
 
 		this.speed = speed;
@@ -96,6 +103,9 @@ public class Aggregation implements IPullNotification {
 		this.maxlongitude = maxlongitude;
 		this.barycentricLatitude = barycentricLatitude;
 		this.barycentricLongitude = barycentricLongitude;
+		this.curvAbsc = curvAvsc;
+		this.minCurvAbsc = minCurvAbsc;
+		this.maxCurvAbsc = maxCurvAbsc;
 		this.aggregationSize = aggregationSize;
 		this.time = time;
 	}
@@ -113,6 +123,9 @@ public class Aggregation implements IPullNotification {
 		this.maxlongitude = 0;
 		this.barycentricLatitude = 0;
 		this.barycentricLongitude = 0;
+		this.curvAbsc = 0;
+		this.minCurvAbsc = 0;
+		this.maxCurvAbsc = 0;
 		this.aggregationSize = 0;
 		this.time = 0;
 	}
@@ -129,6 +142,9 @@ public class Aggregation implements IPullNotification {
 		double maxlongitude = Double.MIN_VALUE;
 		double barycentricLatitude = 0;
 		double barycentricLongitude = 0;
+		double curvAbsc = 0;
+		double minCurvAbsc = Double.MAX_VALUE;
+		double maxCurvAbsc = Double.MIN_VALUE;
 		int aggregationSize = 0;
 		double time = 0;
 
@@ -148,6 +164,9 @@ public class Aggregation implements IPullNotification {
 			minlatitude = Math.min(minlatitude, agg.minlatitude);
 			minlongitude = Math.min(minlongitude, agg.minlongitude);
 			maxlatitude = Math.max(maxlatitude, agg.maxlatitude);
+			curvAbsc += agg.curvAbsc;
+			minCurvAbsc = Math.min(minCurvAbsc, agg.minCurvAbsc);
+			maxCurvAbsc = Math.max(maxCurvAbsc, agg.maxCurvAbsc);
 			maxlongitude = Math.max(maxlongitude, agg.maxlongitude);
 			if (agg.direction != null) {
 				totalcos += agg.direction.cosTheta();
@@ -162,9 +181,11 @@ public class Aggregation implements IPullNotification {
 		latitude /= aggregationSize;
 		longitude /= aggregationSize;
 		time /= aggregationSize;
+		curvAbsc /= aggregationSize;
 
 		barycentricLatitude /= totalArea;
 		barycentricLongitude /= totalArea;
+
 		double cosx = 0, sinx = 0;
 		if (totalsin == 0) {
 			cosx = totalcos /= aggregationSize;
@@ -183,6 +204,7 @@ public class Aggregation implements IPullNotification {
 				latitude, longitude,
 				minlatitude, minlongitude, maxlatitude, maxlongitude,
 				barycentricLatitude, barycentricLongitude,
+				curvAbsc, minCurvAbsc, maxCurvAbsc,
 				aggregationSize,
 				time);
 	}
@@ -226,4 +248,7 @@ public class Aggregation implements IPullNotification {
 		return this.speed;
 	}
 
+	public double getCurvAbsc() {
+		return this.curvAbsc;
+	}
 }

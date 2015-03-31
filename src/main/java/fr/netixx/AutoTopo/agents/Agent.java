@@ -5,6 +5,7 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.LinkedList;
+import java.util.Set;
 import java.util.SortedMap;
 import java.util.TreeMap;
 
@@ -42,6 +43,11 @@ public class Agent extends AbstractElement<Agent> implements IElement, IExitPoin
 	private static final double RECENTER_LEADER_PERIOD = Settings.getDouble(Settings.OPTIMIZE_AGENT_RECENTER_LEADER_PERIOD);
 
 	private static final double TRAFFICJAM_DISTANCE_WARN = Settings.getDouble(Settings.AGENT_TRAFFICJAM_SPEED_DISTANCE);
+
+	private static final double DEFAULT_SPEED_LIMIT = Settings.getDouble(Settings.SPEED_LIMIT_DEFAULT);
+
+	private static final boolean SPEED_CLUSTERING_ENABLED = Settings.getBoolean(Settings.OPTIMIZE_ROADSEGMENT_SPEED_CLUSTERING_ENABLED);
+	private static final double SPEED_CLUSTERING_FACTOR = Settings.getDouble(Settings.OPTIMIZE_ROADSEGMENT_SPEED_CLUSTERING_FACTOR);
 
 	private static Logger logger = LogManager.getLogger();
 
@@ -138,7 +144,7 @@ public class Agent extends AbstractElement<Agent> implements IElement, IExitPoin
 		Aggregation res = new Aggregation(vh.getSpeed(), vh.getAcceleration(), vh.getDirection(), vh.getSize(), vh.getLat(),
 				vh.getLong(), vh.getLat()
 				* vh.getSize(), vh.getLong()
-				* vh.getSize(), 1, clock.getTime());
+				* vh.getSize(), vh.getCurvAbsc(), 1, clock.getTime());
 		if (isLeader) {
 			LinkedList<Aggregation> aggs = new LinkedList<>();
 			aggs.add(res);
@@ -311,11 +317,10 @@ public class Agent extends AbstractElement<Agent> implements IElement, IExitPoin
 		manageTraffic();
 	}
 
-	private static final double DEFAULT_SPEED_LIMIT = Settings.getDouble(Settings.SPEED_LIMIT_DEFAULT);
 	private static final SpeedGoal defaultSpeed = new SpeedGoal(DEFAULT_SPEED_LIMIT);
 
 	private void manageTraffic() {
-		double dist = AggregationHelper.longDistance(this.selfAggregate());
+		double dist = AggregationHelper.curvDistance(this.selfAggregate());
 		if (jams != null) {
 			for (TrafficJam jam : jams.getJams()) {
 				if (dist >= jam.start - TRAFFICJAM_DISTANCE_WARN && dist <= jam.end) {
@@ -416,7 +421,7 @@ public class Agent extends AbstractElement<Agent> implements IElement, IExitPoin
 
 	private void findAndAttach(Agent a) {
 		// All agents here are subordinates
-		Agent attachPoint = ((RoadSegmentCoordinator) this.parent).findBestAttachPoint(a, new HashSet<IElement>(Arrays.asList(this)));
+		Agent attachPoint = this.findBestAttachPoint(a, new HashSet<IElement>(Arrays.asList(this)));
 		logger.debug("Agent {} is too far, re-attaching to {}", a, attachPoint);
 		if (attachPoint == null) {
 			a.toLeader(this.parent);
@@ -566,6 +571,55 @@ public class Agent extends AbstractElement<Agent> implements IElement, IExitPoin
 
 		return true;
 
+	}
+
+	public Agent findBestAttachPoint(Agent agent) {
+		return findBestAttachPoint(agent, new HashSet<IElement>());
+	}
+
+	public Agent findBestAttachPoint(Agent agent, Set<IElement> except) {
+		return findBestAttachPoint(agent, ((RoadSegmentCoordinator) this.parent).getAvailableAgentsFor(agent), except);
+	}
+
+	public Agent findBestAttachPoint(Agent agent, Collection<Agent> haystack, Set<IElement> except) {
+		SortedMap<Aggregation, Agent> candidates = new TreeMap<>(AggregationHelper.createDistanceAndSpeedAndAccelerationAggregationComparator());
+		// find potential candidates
+		for (Agent a : haystack) {
+			if (isAvailable(a, agent) && isOnSameRoute(a, agent) && !a.equals(agent) && !except.contains(a) && isSpeedCloseEnough(a, agent)) {
+				// candidates.add(a);
+				candidates.put(a.getAggregate().difference(agent.getAggregate()), a);
+			}
+		}
+		// if no candidate available, make it a Leader (attach to this
+		// coordinator)
+		if (candidates.isEmpty()) {
+			logger.debug("No candidate available for reattachment of agent {}", agent.getId());
+			return null;
+		}
+		for (Agent c : candidates.values()) {
+			logger.debug("Candidates for {} : Agent {}, distance {}", agent.getId(), c.getId(),
+					AggregationHelper.eulerDistance(c.getAggregate().absDistance(agent.getAggregate())));
+		}
+		return candidates.get(candidates.firstKey());
+
+	}
+
+	private boolean isSpeedCloseEnough(Agent host, Agent candidate) {
+		if (!SPEED_CLUSTERING_ENABLED)
+			return true;
+		final double hs = host.getAggregate().getSpeed();
+		final double cs = candidate.getAggregate().getSpeed();
+		return Math.abs(hs - cs) < SPEED_CLUSTERING_FACTOR * (hs + cs) / 2;
+	}
+
+	private boolean isAvailable(Agent host, Agent candidate) {
+		return !host.maxSizeReached() && host.isInCommunicationRange(candidate);
+	}
+
+	private boolean isOnSameRoute(Agent host, Agent candidate) {
+		// TODO : do better if routes have common segments
+		return (host.getRoute() == null && candidate.getRoute() == null)
+				|| (host.getRoute() != null && host.getRoute().equals(candidate.getRoute()));
 	}
 
 	@Override

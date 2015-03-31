@@ -11,19 +11,29 @@ import java.util.SortedMap;
 import java.util.TreeMap;
 
 import au.com.bytecode.opencsv.CSVWriter;
+import fr.netixx.AutoTopo.agents.IElement;
 
-public class TimeInstantConnections extends AbstractStatistic {
+public class TimeInstantConnections<X extends IElement> extends AbstractStatistic {
 
 	private static boolean enabled = true;
-
+	private static final String[] headers = new String[] { "time", "avg", "std", "max", "min" };
 	private SortedMap<Double, ConnectionsRecorder> connectionMap = new TreeMap<>();
 
+	private RecordFilter<X> filter = null;
+
 	public TimeInstantConnections(String name) {
-		super(name, new String[] { "time", "avg", "std", "max", "min" });
+		super(name, headers);
 	}
 
-	public void record(Double time, int nConnections) {
-		if (enabled && nConnections > 0) {
+	public TimeInstantConnections(String name, RecordFilter<X> filter) {
+		super(name, headers);
+		this.filter = filter;
+	}
+
+	public void record(Double time, X el, int nConnections) {
+		if (enabled) {
+			if (filter != null && filter.filter(el))
+				return;
 			if (!connectionMap.containsKey(time)) {
 				connectionMap.put(time, new ConnectionsRecorder(nConnections));
 			} else {

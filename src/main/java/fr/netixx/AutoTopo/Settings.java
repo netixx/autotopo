@@ -26,8 +26,8 @@ public class Settings {
 	public static final String ROADSEGMENTS_INSTANCES_PREFIX = "roadsegments.instances.";
 	// TODO : remove start ?
 	public static final String ROADSEGMENTS_INSTANCES_START = ROADSEGMENTS_INSTANCES_PREFIX + "start";
-	public static final String ROADSEGMENTS_INSTANCES_END = ".end";
-	public static final String ROADSEGMENTS_INSTANCES_NEXT = ".next";
+	public static final String ROADSEGMENTS_INSTANCES_END = ROADSEGMENTS_INSTANCES_PREFIX + "%s.end";
+	public static final String ROADSEGMENTS_INSTANCES_NEXT = ROADSEGMENTS_INSTANCES_PREFIX + "%s.next";
 
 	public static final String SCHEDULER_AGENTS_TIME_INTERVAL = "scheduler.agents.time.interval";
 	public static final String SCHEDULER_AGENTS_EVENTS_NUMBER = "scheduler.agents.events.number";
@@ -53,6 +53,8 @@ public class Settings {
 	public static final String OPTIMIZE_ANTICIPATION_POSITION_SECONDS = "optimize.anticipation.position.seconds";
 
 	public static final String SPEED_LIMIT_DEFAULT = "speed.limit.default";
+
+	public static final String STATISTICS_ROADSEGMENT_LOG_PREFIX = "statistics.roadsegments.%s.log";
 
 	private static String defaultConfigFile = "default-config.properties";
 
@@ -103,4 +105,7 @@ public class Settings {
 		return Boolean.parseBoolean(props.getProperty(key));
 	}
 
+	public static boolean hasKey(final String key) {
+		return props.containsKey(key);
+	}
 }

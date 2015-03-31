@@ -1,10 +1,8 @@
 package fr.netixx.AutoTopo.agents;
 
 import java.util.Collection;
-import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
-import java.util.Set;
 import java.util.SortedMap;
 import java.util.SortedSet;
 import java.util.TreeMap;
@@ -77,7 +75,7 @@ public class RoadSegmentCoordinator extends AbstractElement<Agent> implements IE
 			RoadSegmentCoordinator next = ((RoadCoordinator) getParent()).getNextSegmentCoordinator(nextCoordinatorId);
 			for (Agent a : new LinkedList<>(getConnectionManager().getConnectedChildren())) {
 				// handoff if agent has reached boundary of this coordinator
-				if (AggregationHelper.longDistance(a.getAggregate()) > endOfSegment) {
+				if (AggregationHelper.curvDistance(a.getAggregate()) >= endOfSegment) {
 					// toChange.add(a);
 					a.changeCoordinator(next);
 				}
@@ -169,7 +167,7 @@ public class RoadSegmentCoordinator extends AbstractElement<Agent> implements IE
 			if (newStop.getSpeed() <= avg.getSpeed() * TRAFFICJAM_JAM_SPEED_FACTOR) {
 				for (Aggregation agg : new LinkedList<>(stopped)) {
 					//this aggregation is too close to one previous agg
-					if (AggregationHelper.minEulerDistance(newStop, agg) <= TRAFFICJAM_INTERDISTANCE) {
+					if (AggregationHelper.minRoadDistance(newStop, agg) <= TRAFFICJAM_INTERDISTANCE) {
 						//merge
 						newStop = Aggregation.aggregate(newStop, agg);
 						stopped.remove(agg);
@@ -182,8 +180,8 @@ public class RoadSegmentCoordinator extends AbstractElement<Agent> implements IE
 		// TODO : abscisse curviligne pour new TrafficJam
 		SortedSet<TrafficJam> jams = new TreeSet<>(TrafficJam.createComparator());
 		for (Aggregation stop : stopped) {
-			double start = AggregationHelper.minLongDistance(stop);
-			double end = AggregationHelper.maxLongDistance(stop);
+			double start = AggregationHelper.minCurvDistance(stop);
+			double end = AggregationHelper.maxCurvDistance(stop);
 			jams.add(new TrafficJam(start, end, stop.getAggregationSize(), jamSpeed));
 		}
 		return jams;
@@ -198,48 +196,18 @@ public class RoadSegmentCoordinator extends AbstractElement<Agent> implements IE
 	// }
 	// }
 	// }
-
-	public Agent findBestAttachPoint(Agent agent) {
-		return findBestAttachPoint(agent, new HashSet<IElement>());
-	}
-
-	public Agent findBestAttachPoint(Agent agent, Set<IElement> except) {
-		return findBestAttachPoint(agent, getConnectionManager().getConnectedChildren(), except);
-	}
-
-	public Agent findBestAttachPoint(Agent agent, Collection<Agent> haystack, Set<IElement> except) {
-
-		SortedMap<Aggregation, Agent> candidates = new TreeMap<>(AggregationHelper.createDistanceAndSpeedAndAccelerationAggregationComparator());
-		// find potential candidates
-		for (Agent a : haystack) {
-			if (isAvailable(a, agent) && isOnSameRoute(a, agent) && !a.equals(agent) && !except.contains(a)) {
-				// candidates.add(a);
-				candidates.put(a.getAggregate().difference(agent.getAggregate()), a);
+	public Collection<Agent> getAvailableAgentsFor(Agent a) {
+		Collection<Agent> r = new LinkedList<>();
+		for (Agent agent : this.getConnectionManager().getConnectedChildren()) {
+			if (isAvailable(agent, a)) {
+				r.add(a);
 			}
 		}
-		// if no candidate available, make it a Leader (attach to this coordinator)
-		if (candidates.isEmpty()) {
-			logger.debug("No candidate available for reattachment of agent {}", agent.getId());
-			// TODO: check for max number of connection for this element (else
-			// error ?)
-			return null;
-		}
-		for (Agent c : candidates.values()) {
-			logger.debug("Candidates for {} : Agent {}, distance {}", agent.getId(), c.getId(),
-					AggregationHelper.eulerDistance(c.getAggregate().absDistance(agent.getAggregate())));
-		}
-		return candidates.get(candidates.firstKey());
-
+		return r;
 	}
 
 	private boolean isAvailable(Agent host, Agent candidate) {
 		return !host.maxSizeReached() && host.isInCommunicationRange(candidate);
-	}
-
-	private boolean isOnSameRoute(Agent host, Agent candidate) {
-		// TODO : do better if routes have common segments
-		return (host.getRoute() == null && candidate.getRoute() == null)
-				|| (host.getRoute() != null && host.getRoute().equals(candidate.getRoute()));
 	}
 
 	private Agent findBestLeader(List<Agent> leaders) {
@@ -272,21 +240,23 @@ public class RoadSegmentCoordinator extends AbstractElement<Agent> implements IE
 		}
 	}
 
-	private Set<IElement> matchAgents(Collection<Agent> bachelor, Collection<Agent> candidates) {
-		Set<IElement> except = new HashSet<>();
-		for (Agent a : bachelor) {
-			// make sure a has no children (otherwise chain of leader occurs)
-			if (a.hasChildren())
-				continue;
-			Agent newLeader = findBestAttachPoint(a, candidates, except);
-			if (newLeader != null) {
-				logger.debug("Found match for single leader {} : {}", a.getId(), newLeader.getId());
-				a.toSubordinate(newLeader);
-				except.add(a);
-			}
-		}
-		return except;
-	}
+	// private Set<IElement> matchAgents(Collection<Agent> bachelor,
+	// Collection<Agent> candidates) {
+	// Set<IElement> except = new HashSet<>();
+	// for (Agent a : bachelor) {
+	// // make sure a has no children (otherwise chain of leader occurs)
+	// if (a.hasChildren())
+	// continue;
+	// Agent newLeader = findBestAttachPoint(a, candidates, except);
+	// if (newLeader != null) {
+	// logger.debug("Found match for single leader {} : {}", a.getId(),
+	// newLeader.getId());
+	// a.toSubordinate(newLeader);
+	// except.add(a);
+	// }
+	// }
+	// return except;
+	// }
 
 	// private Set<IElement> matchSingleAgents(Collection<Agent> candidates) {
 	// if (INTELLIGENT_SINGLE_MATCH_ENABLED) {

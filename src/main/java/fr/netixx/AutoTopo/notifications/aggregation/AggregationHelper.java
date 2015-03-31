@@ -22,6 +22,10 @@ public class AggregationHelper {
 				eulerDistance(agg2.minlatitude - agg1.maxlatitude, agg2.minlongitude - agg1.maxlongitude));
 	}
 
+	public static double minRoadDistance(Aggregation agg1, Aggregation agg2) {
+		return Math.min(Math.abs(agg1.minCurvAbsc - agg2.maxCurvAbsc), Math.abs(agg2.minCurvAbsc - agg1.maxCurvAbsc));
+	}
+
 	private static double eulerDistance(double latitude, double longitude) {
 		return Math.sqrt(square(latitude) + square(longitude));
 	}
@@ -41,6 +45,8 @@ public class AggregationHelper {
 				Math.abs(agg1.barycentricLatitude
 						- agg2.barycentricLatitude),
 						Math.abs(agg1.barycentricLongitude - agg2.barycentricLongitude),
+						Math.abs(agg1.curvAbsc - agg2.curvAbsc), Math.abs(agg1.minCurvAbsc - agg2.minCurvAbsc),
+						Math.abs(agg1.maxCurvAbsc - agg2.maxCurvAbsc),
 						Math.abs(agg1.aggregationSize - agg2.aggregationSize),
 						Math.abs(agg1.time - agg2.time));
 	}
@@ -54,12 +60,25 @@ public class AggregationHelper {
 				agg1.minlatitude - agg2.minlatitude, agg1.minlongitude - agg2.minlongitude,
 				agg1.maxlatitude - agg2.maxlatitude, agg1.maxlongitude - agg2.maxlongitude,
 				agg1.barycentricLatitude - agg2.barycentricLatitude, agg1.barycentricLongitude - agg2.barycentricLongitude,
+				agg1.curvAbsc - agg2.curvAbsc, agg1.minCurvAbsc - agg2.minCurvAbsc, agg1.maxCurvAbsc - agg2.maxCurvAbsc,
 				agg1.aggregationSize - agg2.aggregationSize,
 				agg1.time - agg2.time);
 	}
 
 	public static double longDistance(Aggregation agg) {
 		return Math.abs(agg.longitude);
+	}
+
+	public static double curvDistance(Aggregation agg) {
+		return Math.abs(agg.curvAbsc);
+	}
+
+	public static double minCurvDistance(Aggregation agg) {
+		return Math.abs(agg.minCurvAbsc);
+	}
+
+	public static double maxCurvDistance(Aggregation agg) {
+		return Math.abs(agg.maxCurvAbsc);
 	}
 
 	public static double minLongDistance(Aggregation agg) {
