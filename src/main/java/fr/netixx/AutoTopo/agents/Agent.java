@@ -59,6 +59,7 @@ public class Agent extends AbstractElement<Agent> implements IElement, IExitPoin
 
 	private static int nextId = 0;
 
+	private static final SpeedGoal defaultSpeed = new SpeedGoal(DEFAULT_SPEED_LIMIT);
 	/**
 	 * TODO:..!
 	 *
@@ -317,8 +318,6 @@ public class Agent extends AbstractElement<Agent> implements IElement, IExitPoin
 		manageTraffic();
 	}
 
-	private static final SpeedGoal defaultSpeed = new SpeedGoal(DEFAULT_SPEED_LIMIT);
-
 	private void manageTraffic() {
 		double dist = AggregationHelper.curvDistance(this.selfAggregate());
 		if (jams != null) {
@@ -328,9 +327,8 @@ public class Agent extends AbstractElement<Agent> implements IElement, IExitPoin
 					return;
 				}
 			}
+			this.targetSpeed = defaultSpeed;
 		}
-		this.targetSpeed = defaultSpeed;
-
 	}
 
 	@Override
