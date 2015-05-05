@@ -1,89 +1,92 @@
 #!/usr/bin/python2.7
 import sys
 import os.path as path
-sys.path.append(path.dirname(path.realpath(__file__)))
 
+sys.path.append(path.dirname(path.realpath(__file__)))
 
 import csv
 import numpy as np
 from string import Template
 
+from grapher import Graph
+from storage import Sqlite3, FileLock, TypeHelper
 
-from grapher import Graph, Database, FileLock, TypeHelper
-
-RESULT_COLNAME_TPL=Template("${var}_${col}_${func}")
+RESULT_COLNAME_TPL = Template("${var}_${col}_${func}")
 
 
 def exp_res_to_colname(var, col, func):
-    return RESULT_COLNAME_TPL.substitute(var = var,
-                                         col = col,
-                                         func = func)
+    return RESULT_COLNAME_TPL.substitute(var=var,
+                                         col=col,
+                                         func=func)
+
 
 HIST_PARAMS = {
-    'min' : 0,
-    'max' : 20,
-    'nbins' : 12
+    'min': 0,
+    'max': 20,
+    'nbins': 12
 }
 
 import ast
+
 TREATMENT = "treatment"
 FILE = "file"
 COLS = "columns"
-#treatment format : {var/file : [(funcs)|func, col|(func)]}
+# treatment format : {var/file : [(funcs)|func, col|(func)]}
 DATA_DESCRIPTION = {
     "speed": {
-        FILE:"speed.csv",
+        FILE: "speed.csv",
         TREATMENT: [
             (("avg", "std", "cdf"), "avg"),
-            ],
-        },
+        ],
+    },
     "acc": {
-        TREATMENT:[
+        TREATMENT: [
             (("avg", "cdf"), "cumulatedPlus"),
             (("avg", "cdf"), "cumulatedMinus"),
-            ],
-        FILE:"acceleration.csv",
-        },
-    "agentConn": {
-        TREATMENT:[
-            (("avg", "min", "max", "cdf"), ("divide", {"num":"connect", "den":("time", "time"), "nummap":"id", "denmap":("time", "id")}))
         ],
-        FILE:"agentConnections.csv",
-        },
+        FILE: "acceleration.csv",
+    },
+    "agentConn": {
+        TREATMENT: [
+            (("avg", "min", "max", "cdf"),
+             ("divide", {"num": "connect", "den": ("time", "time"), "nummap": "id", "denmap": ("time", "id")}))
+        ],
+        FILE: "agentConnections.csv",
+    },
     "agentInstConn": {
         TREATMENT: [
             (("avg", "cdf"), "avg"),
             ("max", "max")
         ],
-        FILE:"agentsInstantConnections.csv",
-        },
+        FILE: "agentsInstantConnections.csv",
+    },
     "roadConn": {
-        TREATMENT:        [
+        TREATMENT: [
             ("sum", "connect")
         ],
-        FILE:"roadSegmentConnections.csv"
+        FILE: "roadSegmentConnections.csv"
     },
     "roadInstConn": {
-        TREATMENT:[
+        TREATMENT: [
             ("sum", "avg")
         ],
-        FILE:"roadSegmentInstantConnections.csv"
+        FILE: "roadSegmentInstantConnections.csv"
     },
     "time": {
-        TREATMENT:[
+        TREATMENT: [
             (("avg", "cdf"), "time")
         ],
         FILE: "time.csv"
     },
     "timeAgentConn": {
-        TREATMENT:[
+        TREATMENT: [
             (("avg", "cdf"), "avg"),
             ("xy", ("time", "avg"))
         ],
-        FILE:"timeAgentsInstantConnections.csv"
+        FILE: "timeAgentsInstantConnections.csv"
     },
     "timeRoadConn": {
-        TREATMENT:[
+        TREATMENT: [
             (('avg', 'cdf'), "avg"),
             ("xy", ("time", "avg"))
         ],
@@ -98,18 +101,17 @@ DATA_DESCRIPTION = {
     #     COLS : {"time":float,
     #             "positions": ast.literal_eval}
     # },
-    "numbers" : {
-        TREATMENT : [
+    "numbers": {
+        TREATMENT: [
             ("xy", ('time', 'number'))
         ],
-        FILE : "numbers.csv"
+        FILE: "numbers.csv"
     }
 }
 
 
 class CsvReader():
-
-    def __init__(self, file, cols = None):
+    def __init__(self, file, cols=None):
         """
         use cols for checking ?
         :param file:
@@ -118,11 +120,12 @@ class CsvReader():
         """
         # self.cols = {col:i for i, col in enumerate(cols)}
         with open(file, 'r') as f:
-            reader = csv.reader(f, delimiter = ";", quotechar = '"')
+            reader = csv.reader(f, delimiter=";", quotechar='"')
             self.cols = {col: i for i, col in enumerate(reader.next())}
 
             if cols is not None:
                 import operator
+
                 r = []
                 for row in reader:
                     e = []
@@ -136,13 +139,13 @@ class CsvReader():
             else:
                 r = [row for row in reader]
 
-            self.data = np.array(r, dtype = float)
+            self.data = np.array(r, dtype=float)
 
     def _colToNum(self, col):
         return self.cols[col]
 
     def getColumn(self, col):
-        return self.data[:,self._colToNum(col)]
+        return self.data[:, self._colToNum(col)]
 
     def getColumns(self, cols):
         nCols = [self._colToNum(col) for col in cols]
@@ -151,6 +154,7 @@ class CsvReader():
 
 class _FuncHelper(type):
     import numpy as np
+
     np = np
 
     ARRAY_FUNCS = ['hist', 'cdf', 'xy']
@@ -174,10 +178,10 @@ class _FuncHelper(type):
         return cls.np.array([x, y])
 
     @classmethod
-    def divide(cls, num = None, den = None, nummap = None, denmap = None):
+    def divide(cls, num=None, den=None, nummap=None, denmap=None):
         if nummap is None or denmap is None:
             return cls.np.divide(num, den)
-        dden = {denmap[i]:val for i, val in enumerate(den)}
+        dden = {denmap[i]: val for i, val in enumerate(den)}
         aden = []
         for i, val in enumerate(num):
             aden.append(dden[nummap[i]])
@@ -186,13 +190,13 @@ class _FuncHelper(type):
     @classmethod
     def getPrintableName(cls, func, *args, **kwargs):
         f = cls.NAME_MAPPING.get(func, cls.DEFAULT_NAME_MAPPING)
-        return f.format(*args, func = func,**kwargs)
+        return f.format(*args, func=func, **kwargs)
 
     DEFAULT_NAME_MAPPING = "{func}({})"
 
     NAME_MAPPING = {
-        "divide" : "{num}/{den}",
-        "xy" : "{},{}"
+        "divide": "{num}/{den}",
+        "xy": "{},{}"
     }
 
     FUNC_MAP = {
@@ -203,25 +207,28 @@ class _FuncHelper(type):
         "sum": np.sum,
         "cdf": cdf,
         "std": np.std,
-        "xy" : xy,
-        "divide" : divide,
-        "len" : len,
+        "xy": xy,
+        "divide": divide,
+        "len": len,
     }
 
     def __getattr__(cls, item):
         return cls.FUNC_MAP[item]
 
+
 class FuncHelper(object):
     """Properties for making graphs and interface to graph object"""
     __metaclass__ = _FuncHelper
 
+
 def readResults(dir):
     data = {}
-    #load data from files
+    # load data from files
     for name, desc in DATA_DESCRIPTION.iteritems():
-        data[name] = CsvReader(path.join(dir,desc[FILE]), desc[COLS] if desc.has_key(COLS) else None)#,desc[COLS]
+        data[name] = CsvReader(path.join(dir, desc[FILE]), desc[COLS] if desc.has_key(COLS) else None)  # ,desc[COLS]
 
     return data
+
 
 def getParameters(propfile):
     d = {}
@@ -232,9 +239,11 @@ def getParameters(propfile):
                 d[tuple[0]] = tuple[2]
     return d
 
+
 def getScenario(scenario):
     from xml.dom import minidom
-    out = {"scenario" : scenario}
+
+    out = {"scenario": scenario}
     xmldoc = minidom.parse(scenario)
     sc = xmldoc.getElementsByTagName('Simulation')[0]
     out['duration'] = float(sc.getAttribute('duration'))
@@ -252,22 +261,23 @@ def getScenario(scenario):
             vs.append((inflow.getAttribute('t'), (inflow.getAttribute('v'))))
             qs.append((inflow.getAttribute('t'), (inflow.getAttribute('q_per_hour'))))
         vs = np.array(vs, dtype=float).transpose()
-        qs = np.array(qs, dtype = float).transpose()
-        out['inflow_speed_%s'%roadid] = vs
+        qs = np.array(qs, dtype=float).transpose()
+        out['inflow_speed_%s' % roadid] = vs
         out['inflow_q_%s' % roadid] = qs
         meanqval.append(np.trapz(y=qs[1], x=qs[0]))
-        meanqw.append(qs[0].max()-qs[0].min())
+        meanqw.append(qs[0].max() - qs[0].min())
         meanspeedval.append(np.trapz(y=vs[1], x=vs[0]))
-        meanspeedw.append(vs[0].max()-vs[0].min())
+        meanspeedw.append(vs[0].max() - vs[0].min())
     # print meanflow
-    out['inflow_mean_speed'] = np.average(meanspeedval, weights= meanspeedw)/np.mean(meanspeedw)
-    out['inflow_mean_q'] = np.average(meanqval, weights = meanqw)/np.mean(meanqw)
+    out['inflow_mean_speed'] = np.average(meanspeedval, weights=meanspeedw) / np.mean(meanspeedw)
+    out['inflow_mean_q'] = np.average(meanqval, weights=meanqw) / np.mean(meanqw)
 
     return out
 
+
 def crunchResults(params, scenario, data):
     dt = {}
-    #leave params as is
+    # leave params as is
     for name, values in data.iteritems():
         for treatment in DATA_DESCRIPTION[name][TREATMENT]:
             funcs, args = splitTuple(treatment)
@@ -277,23 +287,23 @@ def crunchResults(params, scenario, data):
             # run each func with given args (r)
             if type(funcs) in (tuple, list):
                 for func in funcs:
-
                     dt[exp_res_to_colname(name, displayargs, func)] = getattr(FuncHelper, func)(*args, **kwargs)
             else:
                 dt[exp_res_to_colname(name, displayargs, funcs)] = getattr(FuncHelper, funcs)(*args, **kwargs)
 
     # print dt
-    return dict(params.items()+dt.items()+scenario.items())
+    return dict(params.items() + dt.items() + scenario.items())
 
-def printableArgs(oargs, func = None):
+
+def printableArgs(oargs, func=None):
     out = ""
     if type(oargs) in (tuple, list):
         if oargs[0] in FuncHelper.FUNC_MAP:
-            out += printableArgs(splitTuple(oargs)[1], func = oargs[0])
-        else :
+            out += printableArgs(splitTuple(oargs)[1], func=oargs[0])
+        else:
             out += "_".join(oargs)
     elif type(oargs) is dict:
-        out += FuncHelper.getPrintableName(func, **{k:printableArgs(v) for k, v in oargs.iteritems()})
+        out += FuncHelper.getPrintableName(func, **{k: printableArgs(v) for k, v in oargs.iteritems()})
     else:
         out += oargs
 
@@ -302,11 +312,11 @@ def printableArgs(oargs, func = None):
 
 def reduceArgs(oargs, data, curname):
     kwargs = {}
-    args= ()
-    #1 ("renorm", {"x":"connect", "y": ("time", "avg"), "xmap":"id", "ymap":("time", "id")}))
-    #2 ("func", ("posarg1", "posarg2")
-    #3 ("col1", "col2")
-    #4 "col"
+    args = ()
+    # 1 ("renorm", {"x":"connect", "y": ("time", "avg"), "xmap":"id", "ymap":("time", "id")}))
+    # 2 ("func", ("posarg1", "posarg2")
+    # 3 ("col1", "col2")
+    # 4 "col"
     if type(oargs) in (tuple, list):
         if oargs[0] in FuncHelper.FUNC_MAP:
             split = splitTuple(oargs)
@@ -314,7 +324,7 @@ def reduceArgs(oargs, data, curname):
             aargs, akwargs = reduceArgs(split[1], data, curname)
             args = (getattr(FuncHelper, split[0])(*aargs, **akwargs),)
         else:
-            #3
+            # 3
             args = tuple(data[curname].getColumn(a) for a in oargs)
     elif type(oargs) is dict:
         for k, v in oargs.iteritems():
@@ -326,10 +336,11 @@ def reduceArgs(oargs, data, curname):
 
             kwargs[k] = data[name].getColumn(col)
     else:
-        #4
+        # 4
         args = (data[curname].getColumn(oargs),)
 
     return args, kwargs
+
 
 def splitTuple(t):
     ne = t[1:]
@@ -338,7 +349,10 @@ def splitTuple(t):
 
     return t[0], ne
 
+
 import cmd
+
+
 class SqliteShell(cmd.Cmd):
     PROMPT = "Sqlite (%s) > "
     OUT = ">> %s"
@@ -381,183 +395,192 @@ class SqliteShell(cmd.Cmd):
         print self.db.table_info("experiments")
         print self.db.table_content("experiments")
 
+
 def speedAndAcc(fi, x, filtering):
     thegraph.xy(fi,
-             x = {x: None},
-             y = {exp_res_to_colname("speed", "avg", "avg"): None},
-             parameters = {},
-             filtering = filtering)
+                x={x: None},
+                y={exp_res_to_colname("speed", "avg", "avg"): None},
+                parameters={},
+                filtering=filtering)
 
     thegraph.cdfs(fi,
-               x = {x: None},
-               y = {exp_res_to_colname("speed", "avg", "cdf"): None},
-               parameters = {},
-               filtering = filtering)
+                  x={x: None},
+                  y={exp_res_to_colname("speed", "avg", "cdf"): None},
+                  parameters={},
+                  filtering=filtering)
 
     thegraph.cdfs(fi,
-               x = {x: None},
-               y = {exp_res_to_colname("acc", "cumulatedPlus", "cdf"): None,
-                    exp_res_to_colname("acc", "cumulatedMinus", "cdf"): None},
-               parameters = {},
-               filtering = filtering)
+                  x={x: None},
+                  y={exp_res_to_colname("acc", "cumulatedPlus", "cdf"): None,
+                     exp_res_to_colname("acc", "cumulatedMinus", "cdf"): None},
+                  parameters={},
+                  filtering=filtering)
 
-def connections(fi, x,filtering):
+
+def connections(fi, x, filtering):
     thegraph.xy(fi,
-             x = {x: None},
-             y = {exp_res_to_colname("agentInstConn", "avg", "avg"): None},
-             parameters = {},
-             filtering = filtering)
+                x={x: None},
+                y={exp_res_to_colname("agentInstConn", "avg", "avg"): None},
+                parameters={},
+                filtering=filtering)
 
     thegraph.cdfs(fi,
-               x = {x: None},
-               y = {exp_res_to_colname("agentInstConn", "avg", "cdf"): None},
-               parameters = {},
-               filtering = filtering)
+                  x={x: None},
+                  y={exp_res_to_colname("agentInstConn", "avg", "cdf"): None},
+                  parameters={},
+                  filtering=filtering)
 
     thegraph.xy(fi,
-                x = {x: None},
-                y = {exp_res_to_colname("roadInstConn", "avg", "sum"): None},
-                parameters = {},
-                filtering = filtering)
+                x={x: None},
+                y={exp_res_to_colname("roadInstConn", "avg", "sum"): None},
+                parameters={},
+                filtering=filtering)
 
     thegraph.xy(fi,
-                x = {x: None},
-                y = {"agentConn_connect/time_time_avg": None},
-                parameters = {},
-                filtering = filtering)
+                x={x: None},
+                y={"agentConn_connect/time_time_avg": None},
+                parameters={},
+                filtering=filtering)
 
     thegraph.xy(fi,
-             x = {x: None},
-             y = {exp_res_to_colname("roadConn", "connect", "sum"): None},
-             parameters = {},
-             filtering = filtering)
+                x={x: None},
+                y={exp_res_to_colname("roadConn", "connect", "sum"): None},
+                parameters={},
+                filtering=filtering)
 
     thegraph.xy(fi,
-                x = {x: None},
-                y = {
+                x={x: None},
+                y={
                     "divide": {
                         "num": {exp_res_to_colname("agentInstConn", "avg", "avg"): None},
                         "denom": {exp_res_to_colname("roadConn", "connect", "sum"): None}
                     }
                 },
-                parameters = {},
-                filtering = filtering
-    )
+                parameters={},
+                filtering=filtering
+                )
 
     thegraph.xy(fi,
-                x = {x: None},
-                y = {
+                x={x: None},
+                y={
                     "divide": {
                         "num": {exp_res_to_colname("roadInstConn", "avg", "sum"): None},
                         "denom": {exp_res_to_colname("roadConn", "connect", "sum"): None}
                     }
                 },
-                parameters = {},
-                filtering = filtering
-    )
+                parameters={},
+                filtering=filtering
+                )
 
     thegraph.cdfs(fi,
-               x = {x:None},
-               y = {exp_res_to_colname("timeAgentConn", "time_avg", "xy"): None},
-               parameters = {},
-               filtering = filtering)
+                  x={x: None},
+                  y={exp_res_to_colname("timeAgentConn", "time_avg", "xy"): None},
+                  parameters={},
+                  filtering=filtering)
 
     thegraph.cdfs(fi,
-               x = {x: None},
-               y = {exp_res_to_colname("timeRoadConn", "time_avg", "xy"): None},
-               parameters = {},
-               filtering = filtering)
+                  x={x: None},
+                  y={exp_res_to_colname("timeRoadConn", "time_avg", "xy"): None},
+                  parameters={},
+                  filtering=filtering)
+
 
 def makeSpeedGraph(output_dir):
     speed = thegraph.backend.newFile(path.join(output_dir, "speedFact.pdf"))
     speedAndAcc(speed, "roadsegments.trafficjam.speed-limit.factor",
-                      {
-                          "roadsegments.trafficjam.enabled": "true",
-                          "roadsegments.trafficjam.interjamdistance": 1000,
-                          "roadsegments.trafficjam.jamfactor": 0.1,
+                {
+                    "roadsegments.trafficjam.enabled": "true",
+                    "roadsegments.trafficjam.interjamdistance": 1000,
+                    "roadsegments.trafficjam.jamfactor": 0.1,
 
-                          "agent.trafficjam.speed-limit.distance": 1000,
+                    "agent.trafficjam.speed-limit.distance": 1000,
 
-                          "optimize.agent.recenter-leader.enabled": "false",
-                          "optimize.roadsegment.speed-clustering.enabled": "false",
+                    "optimize.agent.recenter-leader.enabled": "false",
+                    "optimize.roadsegment.speed-clustering.enabled": "false",
 
-                      }
-    )
+                }
+                )
     thegraph.backend.closePdf(speed)
+
 
 def makeJamGraph(output_dir):
     jamFact = thegraph.backend.newFile(path.join(output_dir, "jamFactor.pdf"))
     speedAndAcc(jamFact, "roadsegments.trafficjam.jamfactor",
-                      {
-                            "roadsegments.trafficjam.enabled": "true",
-                            "roadsegments.trafficjam.interjamdistance": 1000,
-                            "roadsegments.trafficjam.speed-limit.factor": 0.8,
+                {
+                    "roadsegments.trafficjam.enabled": "true",
+                    "roadsegments.trafficjam.interjamdistance": 1000,
+                    "roadsegments.trafficjam.speed-limit.factor": 0.8,
 
-                            "agent.trafficjam.speed-limit.distance": 1000,
-                            "optimize.agent.recenter-leader.enabled": "false",
-                            "optimize.roadsegment.speed-clustering.enabled": "false",
-                      }
-    )
+                    "agent.trafficjam.speed-limit.distance": 1000,
+                    "optimize.agent.recenter-leader.enabled": "false",
+                    "optimize.roadsegment.speed-clustering.enabled": "false",
+                }
+                )
     thegraph.backend.closePdf(jamFact)
+
+
 def makeDistanceGraph(output_dir):
     distance = thegraph.backend.newFile(path.join(output_dir, "distance.pdf"))
     speedAndAcc(distance, "agent.trafficjam.speed-limit.distance",
-                      {
-                          "roadsegments.trafficjam.enabled": "true",
-                          "roadsegments.trafficjam.interjamdistance": 1000,
-                          "roadsegments.trafficjam.speed-limit.factor": 0.8,
-                          "roadsegments.trafficjam.jamfactor": 0.1,
+                {
+                    "roadsegments.trafficjam.enabled": "true",
+                    "roadsegments.trafficjam.interjamdistance": 1000,
+                    "roadsegments.trafficjam.speed-limit.factor": 0.8,
+                    "roadsegments.trafficjam.jamfactor": 0.1,
 
-                          "optimize.agent.recenter-leader.enabled": "false",
-                          "optimize.roadsegment.speed-clustering.enabled": "false",
-                      }
-    )
+                    "optimize.agent.recenter-leader.enabled": "false",
+                    "optimize.roadsegment.speed-clustering.enabled": "false",
+                }
+                )
     thegraph.backend.closePdf(distance)
+
 
 def makeAnticipationGraph(output_dir):
     anticipation = thegraph.backend.newFile(path.join(output_dir, "anticipation.pdf"))
     connections(anticipation, "optimize.anticipation.position.seconds",
-                      {
-                          "roadsegments.trafficjam.enabled": "false",
-                          "optimize.agent.recenter-leader.enabled": "false",
-                          "optimize.roadsegment.speed-clustering.enabled": "false",
-                      }
-    )
+                {
+                    "roadsegments.trafficjam.enabled": "false",
+                    "optimize.agent.recenter-leader.enabled": "false",
+                    "optimize.roadsegment.speed-clustering.enabled": "false",
+                }
+                )
     thegraph.backend.closePdf(anticipation)
+
 
 def makeSpeedClusteringGraph(output_dir):
     speedClustering = thegraph.backend.newFile(path.join(output_dir, "speed_clustering.pdf"))
     connections(speedClustering, "optimize.roadsegment.speed-clustering.factor",
-                      {
-                          "roadsegments.trafficjam.enabled": "false",
-                          "optimize.agent.recenter-leader.enabled": "false",
-                          "optimize.roadsegment.speed-clustering.enabled": "true",
-                          "optimize.anticipation.position.seconds" : 0
-                      }
-    )
+                {
+                    "roadsegments.trafficjam.enabled": "false",
+                    "optimize.agent.recenter-leader.enabled": "false",
+                    "optimize.roadsegment.speed-clustering.enabled": "true",
+                    "optimize.anticipation.position.seconds": 0
+                }
+                )
     thegraph.backend.closePdf(speedClustering)
+
 
 def makeRecenterLeaderGraph(output_dir):
     recenterLeader = thegraph.backend.newFile(path.join(output_dir, "recenter_leader.pdf"))
     connections(recenterLeader, "optimize.agent.recenter-leader.period",
-                      {
-                          "roadsegments.trafficjam.enabled": "false",
-                          "optimize.agent.recenter-leader.enabled": "true",
-                          "optimize.roadsegment.speed-clustering.enabled": "false",
-                          # "optimize.agent.recenter-leader.period": 3,
-                          "optimize.agent.recenter-leader.bias": 2,
-                      }
-    )
+                {
+                    "roadsegments.trafficjam.enabled": "false",
+                    "optimize.agent.recenter-leader.enabled": "true",
+                    "optimize.roadsegment.speed-clustering.enabled": "false",
+                    # "optimize.agent.recenter-leader.period": 3,
+                    "optimize.agent.recenter-leader.bias": 2,
+                }
+                )
 
     connections(recenterLeader, "optimize.agent.recenter-leader.bias",
-                      {
-                          "roadsegments.trafficjam.enabled": "false",
-                          "optimize.agent.recenter-leader.enabled": "true",
-                          "optimize.roadsegment.speed-clustering.enabled": "false",
-                          "optimize.agent.recenter-leader.period": 3,
-                          # "optimize.agent.recenter-leader.bias": 2,
-                      }
-    )
+                {
+                    "roadsegments.trafficjam.enabled": "false",
+                    "optimize.agent.recenter-leader.enabled": "true",
+                    "optimize.roadsegment.speed-clustering.enabled": "false",
+                    "optimize.agent.recenter-leader.period": 3,
+                    # "optimize.agent.recenter-leader.bias": 2,
+                }
+                )
     thegraph.backend.closePdf(recenterLeader)
 
 
@@ -637,30 +660,33 @@ def convert_array(text):
     out.seek(0)
     return np.load(out)
 
+
 if __name__ == "__main__":
     ACTION_READ = "read"
     ACTION_WRITE = "write"
     ACTION_GRAPH = "graph"
     import argparse
+
     parser = argparse.ArgumentParser()
 
-    parser.add_argument("--database", default = "sims.db")
-
     mode = parser.add_subparsers()
-    write = mode.add_parser("write")
+    write = mode.add_parser("write")  # , parents=[parser])
     write.set_defaults(action=ACTION_WRITE)
     write.add_argument("--output-dir", default = "output")
     write.add_argument("--parameters", default = "autotopo-config.properties")
     write.add_argument("--scenario", default = "scenario.xprj")
 
-    read = mode.add_parser("read")
+    write.add_argument("--database", default="sims.db")
+
+    read = mode.add_parser("read")  #, parents=[parser])
     read.set_defaults(action=ACTION_READ)
     read.add_argument("--shell", action = 'store_true', default = False)
+    read.add_argument("--database", default="sims.db")
 
-
-    graph = mode.add_parser("graph")
+    graph = mode.add_parser("graph")  #, parents=[parser])
     graph.set_defaults(action=ACTION_GRAPH)
     graph.add_argument("--output-dir", default = "graphs")
+    graph.add_argument("--database", default="sims.db")
 
     opts = parser.parse_args()
 
@@ -670,29 +696,28 @@ if __name__ == "__main__":
     # Converts TEXT to np.array when selecting
     sqlite3.register_converter(TypeHelper.CUSTOM_ARRAY, convert_array)
 
-    with Database(sqlite3.connect(opts.database, detect_types=sqlite3.PARSE_DECLTYPES|sqlite3.PARSE_COLNAMES)) as db:
+    with Sqlite3(
+            sqlite3.connect(opts.database, detect_types=sqlite3.PARSE_DECLTYPES | sqlite3.PARSE_COLNAMES)) as storage:
         if opts.action == ACTION_READ:
-            SqliteShell(opts.database, db).cmdloop()
+            SqliteShell(opts.database, storage).cmdloop()
         elif opts.action == ACTION_WRITE:
             with FileLock(path.join(path.dirname(path.realpath(__file__)), ".db_lock")) as lock:
-                db.prepare_base()
+                print "Recording results into database"
+                storage.prepare()
 
                 params = getParameters(opts.parameters)
                 data = readResults(opts.output_dir)
                 scenario = getScenario(opts.scenario)
                 res = crunchResults(params, scenario, data)
 
-                db.prepare_parameters(params)
-                db.prepare_results(res)
-                db.prepare_scenario(scenario)
-
-
-                db.write_results(res)
+                storage.write_row(res)
+                print "Results recorded"
         elif opts.action == ACTION_GRAPH:
             if not path.exists(opts.output_dir):
                 from os import mkdir
+
                 mkdir(opts.output_dir)
-            thegraph = Graph(db)
+            thegraph = Graph(storage)
             print thegraph.db
             makeGraphs(opts.output_dir)
 
