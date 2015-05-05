@@ -18,7 +18,7 @@ ${run} -f "$1" -o "$2" -a "$3"
 makeSim() {
 #    cd "$root_dir"
 	makeRun "$scenario" "$output_dir" "$config"
-	eval ${record} --database ${db} write --parameters ${config} --output-dir ${output_dir} --scenario ${scenario} && rm "$output_dir"/*.csv
+	python ${record} --database ${db} write --parameters ${config} --output-dir ${output_dir} --scenario ${scenario} && rm "$output_dir"/*.csv
 }
 
 echo -e "Running sim in $root_dir, scenario $scenario, config is \n>>>`cat "$config"`\n<<<\n"
