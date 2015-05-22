@@ -17,6 +17,7 @@ public class Clustering {
 	private static final int MAX_SCOPE_NUMBER_THRESHOLD = MAX_SCOPE_NUMBER + Settings.getInt(Settings.MAX_SCOPE_NUMBER_THRESHOLD);
 	private static final boolean SPEED_CLUSTERING_ENABLED = Settings.getBoolean(Settings.OPTIMIZE_ROADSEGMENT_SPEED_CLUSTERING_ENABLED);
 	private static final double SPEED_CLUSTERING_FACTOR = Settings.getDouble(Settings.OPTIMIZE_ROADSEGMENT_SPEED_CLUSTERING_FACTOR);
+	private Comparator<Merge> mergeComparator = createMergeComparator();
 
 	public List<List<Agent>> merge(Collection<Agent> leaders) {
 		// convert to better object
@@ -25,7 +26,7 @@ public class Clustering {
 			Merge m = new Merge(leader);
 			merges.add(m);
 		}
-		Collections.sort(merges, createMergeComparator());
+		Collections.sort(merges, mergeComparator);
 		merges = checkAndMerge(merges, 0);
 		List<List<Agent>> ret = new LinkedList<>();
 
@@ -38,7 +39,6 @@ public class Clustering {
 		}
 
 		return ret;
-
 	}
 
 	private ArrayList<Merge> checkAndMerge(ArrayList<Merge> merges, int takeIndex) {
@@ -50,12 +50,11 @@ public class Clustering {
 			if (!c.equals(m) && m.canMerge(c) && m.shouldMerge(c)) {
 				m.merge(c);
 				merges.remove(takeIndex);
-				Collections.sort(merges, createMergeComparator());
+				Collections.sort(merges, mergeComparator);
 				return checkAndMerge(merges, takeIndex);
 			}
 		}
 		return checkAndMerge(merges, ++takeIndex);
-
 	}
 
 	private class Merge {
@@ -125,8 +124,8 @@ public class Clustering {
 			public int compare(Merge o1, Merge o2) {
 				if (o1 == null || o2 == null)
 					throw new NullPointerException();
-
-				return Integer.compare(o1.getN(), o2.getN());
+				// TODO : minus here ??
+				return -Integer.compare(o1.getN(), o2.getN());
 			}
 
 		};

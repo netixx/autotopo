@@ -1,8 +1,9 @@
 package fr.netixx.AutoTopo.agents;
 
 
-public class Scope implements IScope {
+import fr.netixx.AutoTopo.statistics.TimeScope;
 
+public class Scope implements IScope, Comparable<IScope> {
 	private static int curId = 0;
 
 	private int score = 0;
@@ -32,5 +33,13 @@ public class Scope implements IScope {
 	@Override
 	public String toString() {
 		return String.format("Scope id: %d score: %d", id, score);
+	}
+
+	@Override
+	public int compareTo(IScope o) {
+		if (o == null)
+			return 1;
+
+		return Integer.compare(this.getId(), o.getId());
 	}
 }

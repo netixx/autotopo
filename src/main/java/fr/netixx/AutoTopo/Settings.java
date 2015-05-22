@@ -56,6 +56,8 @@ public class Settings {
 
 	public static final String STATISTICS_ROADSEGMENT_LOG_PREFIX = "statistics.roadsegments.%s.log";
 
+	public static final String DECORATION_SCOPE_HUE_STEP = "decoration.scope.hue.step";
+
 	private static String defaultConfigFile = "default-config.properties";
 
 	private final static Logger logger = LogManager.getLogger();

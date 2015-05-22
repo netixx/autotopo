@@ -6,6 +6,7 @@ import java.util.Hashtable;
 import java.util.LinkedList;
 import java.util.Map;
 
+import fr.netixx.AutoTopo.statistics.TimeScope;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -160,9 +161,12 @@ public class AutoTopoMovsimController implements IController {
 	private TimeInstantConnections<RoadSegmentCoordinator> timeSegmentInstConnections = new TimeInstantConnections<>("timeSegmentInstantConnections",
 			roadSegmentFilter);
 
+	private TimeScope timeScope = new TimeScope("timeScope");
+
 	public void monitorStatistics() {
 		double time = movsimClock.getTime();
 		for (Agent a : linktable.values()) {
+			timeScope.record(time, a.getScope());
 			if (a.isLeader()) {
 				agentInstConnections.record(a, a.getChildrenSize());
 				timeAgentInstConnections.record(time, a, a.getChildrenSize());
@@ -205,6 +209,7 @@ public class AutoTopoMovsimController implements IController {
 
 		Controller.writeCsv(path, timeAgentInstConnections);
 		Controller.writeCsv(path, timeSegmentInstConnections);
+		Controller.writeCsv(path, timeScope);
 	}
 	// public static void initialize(IRoadAdapter road) {
 	// int segmentNumber = 1;
