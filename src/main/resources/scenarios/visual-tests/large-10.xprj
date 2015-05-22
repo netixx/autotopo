@@ -1,0 +1,96 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- (c) Arne Kesting, Ralph Germ, Martin Budden, Martin Treiber (2012) -->
+<Movsim>
+	<VehiclePrototypes write_fund_diagrams="false">
+		<!-- <VehiclePrototypeConfiguration label="ACC1" length="5" maximum_deceleration="9" 
+			consumption_model_name="carDiesel"> -->
+		<VehiclePrototypeConfiguration label="ACC1"
+			length="5" maximum_deceleration="9">
+			<AccelerationModelType>
+				<ModelParameterAT v0="35" T="1.2" s0="2" s1="0"
+					delta="4" a="1.2" b="2.0" coolness="1" />
+				<!-- <ModelParameterACC v0="35" T="1.2" s0="2" s1="0" delta="4" a="1.2" 
+					b="2.0" coolness="1" /> -->
+			</AccelerationModelType>
+			<LaneChangeModelType european_rules="true"
+				crit_speed_eur="20">
+				<ModelParameterMOBIL safe_deceleration="5.0"
+					minimum_gap="2.0" threshold_acceleration="0.1"
+					right_bias_acceleration="0.1" politeness="0.1" />
+			</LaneChangeModelType>
+		<!--</VehiclePrototypeConfiguration>-->
+		<!--&lt;!&ndash; <VehiclePrototypeConfiguration label="ACC2" length="16" maximum_deceleration="9" -->
+			<!--consumption_model_name="carDiesel"> &ndash;&gt;-->
+		<!--<VehiclePrototypeConfiguration label="ACC2"-->
+			<!--length="16" maximum_deceleration="9">-->
+			<!--<AccelerationModelType>-->
+				<!--<ModelParameterAT v0="35" T="1.2" s0="2" s1="0"-->
+					<!--delta="4" a="1.2" b="2.0" coolness="1" />-->
+				<!--&lt;!&ndash; <ModelParameterACC v0="25" T="1.5" s0="2" s1="2" delta="4" a="0.8" -->
+					<!--b="2.0" coolness="1" /> &ndash;&gt;-->
+			<!--</AccelerationModelType>-->
+			<!--<LaneChangeModelType european_rules="true"-->
+				<!--crit_speed_eur="20">-->
+				<!--<ModelParameterMOBIL safe_deceleration="5.0"-->
+					<!--minimum_gap="2.0" threshold_acceleration="0.1"-->
+					<!--right_bias_acceleration="0.1" politeness="0.1" />-->
+			<!--</LaneChangeModelType>-->
+		</VehiclePrototypeConfiguration>
+	</VehiclePrototypes>
+	<Scenario network_filename="large-10.xodr">
+		<Simulation timestep="0.2" seed="42" crash_exit="false">
+			<!--with_seed="false"-->
+			<TrafficComposition>
+				<VehicleType label="ACC1" fraction="1"
+					relative_v0_randomization="0.2" />
+				<!--<VehicleType label="ACC2" fraction="0"-->
+					<!--relative_v0_randomization="0.2" />-->
+			</TrafficComposition>
+			<Road id="1">
+				<TrafficSource logging="false">
+					<Inflow t="0" q_per_hour="1800.0" v="33.0" />
+					<Inflow t="5.0" q_per_hour="1800.0" v="33.0" />
+					<Inflow t="5.0" q_per_hour="0" v="33.0" />
+					<Inflow t="15.0" q_per_hour="0" v="33.0" />
+					<Inflow t="15.0" q_per_hour="1800.0" v="33.0" />
+					<Inflow t="20.0" q_per_hour="1800.0" v="33.0" />
+					<Inflow t="20.0" q_per_hour="0" v="33.0" />
+					<Inflow t="30.0" q_per_hour="0" v="33.0" />
+					<Inflow t="30.0" q_per_hour="1800.0" v="33.0" />
+					<Inflow t="35.0" q_per_hour="1800.0" v="33.0" />
+					<Inflow t="35.0" q_per_hour="0" v="33.0" />
+					<Inflow t="45.0" q_per_hour="0" v="33.0" />
+					<Inflow t="45.0" q_per_hour="1800.0" v="33.0" />
+					<Inflow t="50.0" q_per_hour="1800.0" v="33.0" />
+					<Inflow t="50.0" q_per_hour="0" v="33.0" />
+					<Inflow t="60.0" q_per_hour="0" v="33.0" />
+					<Inflow t="60.0" q_per_hour="1800.0" v="33.0" />
+					<Inflow t="65.0" q_per_hour="1800.0" v="33.0" />
+					<Inflow t="65.0" q_per_hour="0" v="33.0" />
+					<Inflow t="75.0" q_per_hour="0" v="33.0" />
+					<Inflow t="75.0" q_per_hour="1800.0" v="33.0" />
+					<Inflow t="80.0" q_per_hour="1800.0" v="33.0" />
+					<Inflow t="80.0" q_per_hour="0" v="33.0" />
+					<Inflow t="90.0" q_per_hour="0" v="33.0" />
+					<Inflow t="90.0" q_per_hour="1800.0" v="33.0" />
+					<Inflow t="95.0" q_per_hour="1800.0" v="33.0" />
+					<Inflow t="95.0" q_per_hour="0" v="33.0" />
+					<Inflow t="105.0" q_per_hour="0" v="33.0" />
+					<Inflow t="105.0" q_per_hour="1800.0" v="33.0" />
+					<Inflow t="110.0" q_per_hour="1800.0" v="33.0" />
+					<Inflow t="110.0" q_per_hour="0" v="33.0" />
+					<Inflow t="120.0" q_per_hour="0" v="33.0" />
+					<Inflow t="120.0" q_per_hour="1800.0" v="33.0" />
+					<Inflow t="125.0" q_per_hour="1800.0" v="33.0" />
+					<Inflow t="125.0" q_per_hour="0" v="33.0" />
+					<Inflow t="135.0" q_per_hour="0" v="33.0" />
+					<Inflow t="135.0" q_per_hour="1800.0" v="33.0" />
+					<Inflow t="140.0" q_per_hour="1800.0" v="33.0" />
+					<Inflow t="140.0" q_per_hour="0" v="33.0" />
+					<Inflow t="150.0" q_per_hour="0" v="33.0" />
+				</TrafficSource>
+			</Road>
+		</Simulation>
+	</Scenario>
+</Movsim>
+
