@@ -1,11 +1,13 @@
 __author__ = 'francois'
 from string import Template
 import sqlite3
-
+import numpy as np
+import pandas as pd
+import os
 
 class Storage(object):
     def __enter__(self):
-        pass
+        return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         pass
@@ -16,12 +18,117 @@ class Storage(object):
     def write_row(self, rowdict):
         pass
 
+class PandasCsv(Storage):
+
+    def __init__(self, database):
+        self.data = pd.DataFrame()
+        self.database = database
+        self.rowlist = []
+
+    def __enter__(self):
+        if os.path.exists(self.database):
+            self.data = pd.read_csv(self.database)
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        newdata = pd.DataFrame(self.rowlist)
+        print newdata
+        d = pd.concat([self.data, newdata])
+        d.to_csv(self.database)
+
+    def prepare(self):
+        pass
+
+    def write_row(self, rowdict):
+        self.rowlist.append(rowdict)
+
+### Sqlite implementation ###
+
+class TypeHelper(object):
+    SQLITE_TXT = "TEXT"
+    SQLITE_INT = "INT"
+    SQLITE_FLOAT = "REAL"
+    SQLITE_BLOB = "BLOB"
+    CUSTOM_ARRAY = "ARRAY"
+
+    @classmethod
+    def getType(cls, sample):
+        if type(sample) is np.ndarray:
+            return cls.CUSTOM_ARRAY
+        elif type(sample) in [basestring, str]:
+            return cls.getTypeFromString(sample)
+        elif type(sample) in (float, np.float_):
+            return cls.SQLITE_FLOAT
+        elif type(sample) is int:
+            return cls.SQLITE_INT
+        elif type(sample) is bool:
+            return cls.SQLITE_TXT
+        return cls.SQLITE_BLOB
+
+    @classmethod
+    def getTypeFromString(cls, s):
+        try:
+            float(s)
+            return cls.SQLITE_FLOAT
+        except ValueError:
+            pass
+
+        try:
+            import unicodedata
+
+            d = unicodedata.numeric(s)
+            if type(d) == float:
+                return cls.SQLITE_FLOAT
+            elif type(d) == int:
+                return cls.SQLITE_INT
+        except (TypeError, ValueError):
+            pass
+
+        return cls.SQLITE_TXT
+
+    @staticmethod
+    def is_number(s):
+        try:
+            return float(s)
+        # return True
+        except ValueError:
+            pass
+
+        try:
+            import unicodedata
+
+            return unicodedata.numeric(s)
+        # return True
+        except (TypeError, ValueError):
+            pass
+
+        return False
+
+import io
+
+def adapt_array(arr):
+    out = io.BytesIO()
+    np.save(out, arr)
+    out.seek(0)
+    # http://stackoverflow.com/a/3425465/190597 (R. Hill)
+    return buffer(out.read())
+
+
+def convert_array(text):
+    out = io.BytesIO(text)
+    out.seek(0)
+    return np.load(out)
 
 class Sqlite3(Storage):
     table = 'experiments'
 
-    def __init__(self, connection):
-        self.connection = connection
+    def __init__(self, database):
+        # Converts np.array to TEXT when inserting
+        sqlite3.register_adapter(np.ndarray, adapt_array)
+
+        # Converts TEXT to np.array when selecting
+        sqlite3.register_converter(TypeHelper.CUSTOM_ARRAY, convert_array)
+        self.connection = sqlite3.connect(database, detect_types=sqlite3.PARSE_DECLTYPES | sqlite3.PARSE_COLNAMES)
 
     def __enter__(self):
         return self
@@ -113,65 +220,46 @@ class FileLock(object):
         self.fp.close()
 
 
-import numpy as np
-
-
-class TypeHelper(object):
-    SQLITE_TXT = "TEXT"
-    SQLITE_INT = "INT"
-    SQLITE_FLOAT = "REAL"
-    SQLITE_BLOB = "BLOB"
-    CUSTOM_ARRAY = "ARRAY"
-
-    @classmethod
-    def getType(cls, sample):
-        if type(sample) is np.ndarray:
-            return cls.CUSTOM_ARRAY
-        elif type(sample) in [basestring, str]:
-            return cls.getTypeFromString(sample)
-        elif type(sample) in (float, np.float_):
-            return cls.SQLITE_FLOAT
-        elif type(sample) is int:
-            return cls.SQLITE_INT
-        elif type(sample) is bool:
-            return cls.SQLITE_TXT
-        return cls.SQLITE_BLOB
-
-    @classmethod
-    def getTypeFromString(cls, s):
-        try:
-            float(s)
-            return cls.SQLITE_FLOAT
-        except ValueError:
-            pass
-
-        try:
-            import unicodedata
-
-            d = unicodedata.numeric(s)
-            if type(d) == float:
-                return cls.SQLITE_FLOAT
-            elif type(d) == int:
-                return cls.SQLITE_INT
-        except (TypeError, ValueError):
-            pass
-
-        return cls.SQLITE_TXT
-
-    @staticmethod
-    def is_number(s):
-        try:
-            return float(s)
-        # return True
-        except ValueError:
-            pass
-
-        try:
-            import unicodedata
-
-            return unicodedata.numeric(s)
-        # return True
-        except (TypeError, ValueError):
-            pass
-
-        return False
+# import cmd
+#
+# class SqliteShell(cmd.Cmd):
+#     PROMPT = "Sqlite (%s) > "
+#     OUT = ">> %s"
+#
+#     def __init__(self, database, db):
+#         cmd.Cmd.__init__(self)
+#         self.prompt = self.PROMPT % database
+#         self.db = db
+#
+#     def precmd(self, line):
+#         """Hook method executed just before the command line is
+#         interpreted, but after the input prompt is generated and issued.
+#
+#         """
+#         return line
+#
+#     def postcmd(self, stop, line):
+#         """Hook method executed just after a command dispatch is finished."""
+#         return stop
+#
+#     def preloop(self):
+#         """Hook method executed once when the cmdloop() method is called."""
+#         pass
+#
+#     def postloop(self):
+#         """Hook method executed once when the cmdloop() method is about to
+#         return.
+#
+#         """
+#         pass
+#
+#     def sql(self, arg):
+#         if arg is not None:
+#             try:
+#                 print self.OUT % repr(self.db.read(arg))
+#             except sqlite3.Error as e:
+#                 print e.message
+#
+#     def disp_data(self, arg):
+#         print self.db.table_info("experiments")
+#         print self.db.table_content("experiments")

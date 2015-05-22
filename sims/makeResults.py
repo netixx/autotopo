@@ -9,103 +9,105 @@ import numpy as np
 from string import Template
 
 from grapher import Graph
-from storage import Sqlite3, FileLock, TypeHelper
+from storage import FileLock, Sqlite3, PandasCsv
+from processing import FILE, TREATMENT, COLS, Function
+
 
 RESULT_COLNAME_TPL = Template("${var}_${col}_${func}")
-
 
 def exp_res_to_colname(var, col, func):
     return RESULT_COLNAME_TPL.substitute(var=var,
                                          col=col,
                                          func=func)
 
-
-HIST_PARAMS = {
-    'min': 0,
-    'max': 20,
-    'nbins': 12
-}
-
-import ast
-
-TREATMENT = "treatment"
-FILE = "file"
-COLS = "columns"
-# treatment format : {var/file : [(funcs)|func, col|(func)]}
 DATA_DESCRIPTION = {
     "speed": {
         FILE: "speed.csv",
         TREATMENT: [
-            (("avg", "std", "cdf"), "avg"),
+            Function(("avg", "std", "cdf"), posparams="avg"),
         ],
     },
     "acc": {
         TREATMENT: [
-            (("avg", "cdf"), "cumulatedPlus"),
-            (("avg", "cdf"), "cumulatedMinus"),
+            Function(("avg", "cdf"), posparams="cumulatedPlus"),
+            Function(("avg", "cdf"), posparams="cumulatedMinus"),
         ],
         FILE: "acceleration.csv",
     },
-    "agentConn": {
-        TREATMENT: [
-            (("avg", "min", "max", "cdf"),
-             ("divide", {"num": "connect", "den": ("time", "time"), "nummap": "id", "denmap": ("time", "id")}))
-        ],
-        FILE: "agentConnections.csv",
-    },
+    # "agentConn": {
+    #     TREATMENT: [
+    #         Function(("avg", "min", "max", "cdf"),
+    #          posparams = Function("divide", kwparams={"num": "connect", "den": ("time", "time"), "nummap": "id", "denmap": ("time", "id")})
+    #         )
+    #     ],
+    #     FILE: "agentConnections.csv",
+    # },
     "agentInstConn": {
         TREATMENT: [
-            (("avg", "cdf"), "avg"),
-            ("max", "max")
+            Function(("avg", "cdf"), posparams="avg"),
+            Function("max", posparams="max")
         ],
         FILE: "agentsInstantConnections.csv",
     },
-    "roadConn": {
-        TREATMENT: [
-            ("sum", "connect")
-        ],
-        FILE: "roadSegmentConnections.csv"
-    },
-    "roadInstConn": {
-        TREATMENT: [
-            ("sum", "avg")
-        ],
-        FILE: "roadSegmentInstantConnections.csv"
-    },
+    # "roadConn": {
+    #     TREATMENT: [
+    #         Function("sum", posparams="connect")
+    #     ],
+    #     FILE: "roadSegmentConnections.csv"
+    # },
+    # "roadInstConn": {
+    #     TREATMENT: [
+    #         Function("sum", posparams="avg")
+    #     ],
+    #     FILE: "roadSegmentInstantConnections.csv"
+    # },
     "time": {
         TREATMENT: [
-            (("avg", "cdf"), "time")
+            Function(("avg", "cdf"), posparams="time")
         ],
         FILE: "time.csv"
     },
     "timeAgentConn": {
         TREATMENT: [
-            (("avg", "cdf"), "avg"),
-            ("xy", ("time", "avg"))
+            Function(("avg", "cdf"), posparams="avg"),
+            Function("xy", posparams=("time", "avg"))
         ],
         FILE: "timeAgentsInstantConnections.csv"
     },
-    "timeRoadConn": {
-        TREATMENT: [
-            (('avg', 'cdf'), "avg"),
-            ("xy", ("time", "avg"))
-        ],
-        FILE: "timeSegmentInstantConnections.csv"
-
-    },
-    # "positions" : {
-    #     TREATMENT : [
-    #         ("xy", ('time', ('len', 'positions')))
+    # "timeRoadConn": {
+    #     TREATMENT: [
+    #         Function(('avg', 'cdf'), posparams="avg"),
+    #         Function("xy", posparams=("time", "avg"))
     #     ],
-    #     FILE : "positions.csv",
-    #     COLS : {"time":float,
-    #             "positions": ast.literal_eval}
+    #     FILE: "timeSegmentInstantConnections.csv"
+    #
     # },
-    "numbers": {
+    # # "positions" : {
+    # #     TREATMENT : [
+    # #         ("xy", ('time', ('len', 'positions')))
+    # #     ],
+    # #     FILE : "positions.csv",
+    # #     COLS : {"time":float,
+    # #             "positions": ast.literal_eval}
+    # # },
+    # "numbers": {
+    #     TREATMENT: [
+    #         ("xy", ('time', 'number'))
+    #     ],
+    #     FILE: "numbers.csv"
+    # },
+    "scopes": {
         TREATMENT: [
-            ("xy", ('time', 'number'))
+            Function("avg", posparams = Function("minus", posparams= ("delete", "create"))),
+            Function("cdf", posparams=
+                Function("mul", posparams = (
+                    Function("minus", posparams = ("delete", "create")),
+                    "avg"
+                )
+            )
+            ),
         ],
-        FILE: "numbers.csv"
+        FILE: "timeScope.csv"
     }
 }
 
@@ -150,75 +152,6 @@ class CsvReader():
     def getColumns(self, cols):
         nCols = [self._colToNum(col) for col in cols]
         return self.data[:, nCols][1:]
-
-
-class _FuncHelper(type):
-    import numpy as np
-
-    np = np
-
-    ARRAY_FUNCS = ['hist', 'cdf', 'xy']
-    TUPLE_FUNCS = ['xy']
-
-    @classmethod
-    def cdf(cls, data):
-        s = cls.np.sort(data)
-        # s = cls.jitter(s)
-        yvals = (cls.np.arange(len(s)) + 0.5) / float(len(s))
-        return cls.np.array([s, yvals])
-
-    @classmethod
-    def hist(cls, data):
-        # bins = cls.np.linspace(HIST_PARAMS['min'], HIST_PARAMS['max'], HIST_PARAMS['nbins'])
-        hist, bin_edges = cls.np.histogram(data, HIST_PARAMS['nbins'])
-        return cls.np.array([bin_edges, hist])
-
-    @classmethod
-    def xy(cls, x, y):
-        return cls.np.array([x, y])
-
-    @classmethod
-    def divide(cls, num=None, den=None, nummap=None, denmap=None):
-        if nummap is None or denmap is None:
-            return cls.np.divide(num, den)
-        dden = {denmap[i]: val for i, val in enumerate(den)}
-        aden = []
-        for i, val in enumerate(num):
-            aden.append(dden[nummap[i]])
-        return cls.np.divide(num, aden)
-
-    @classmethod
-    def getPrintableName(cls, func, *args, **kwargs):
-        f = cls.NAME_MAPPING.get(func, cls.DEFAULT_NAME_MAPPING)
-        return f.format(*args, func=func, **kwargs)
-
-    DEFAULT_NAME_MAPPING = "{func}({})"
-
-    NAME_MAPPING = {
-        "divide": "{num}/{den}",
-        "xy": "{},{}"
-    }
-
-    FUNC_MAP = {
-        "avg": np.average,
-        "min": np.min,
-        "max": np.max,
-        "hist": hist,
-        "sum": np.sum,
-        "cdf": cdf,
-        "std": np.std,
-        "xy": xy,
-        "divide": divide,
-        "len": len,
-    }
-
-    def __getattr__(cls, item):
-        return cls.FUNC_MAP[item]
-
-
-class FuncHelper(object):
-    """Properties for making graphs and interface to graph object"""
-    __metaclass__ = _FuncHelper
 
 
 def readResults(dir):
@@ -280,120 +213,15 @@ def crunchResults(params, scenario, data):
     # leave params as is
     for name, values in data.iteritems():
         for treatment in DATA_DESCRIPTION[name][TREATMENT]:
-            funcs, args = splitTuple(treatment)
-            displayargs = printableArgs(args)
-            args, kwargs = reduceArgs(args, data, name)
-
-            # run each func with given args (r)
-            if type(funcs) in (tuple, list):
-                for func in funcs:
-                    dt[exp_res_to_colname(name, displayargs, func)] = getattr(FuncHelper, func)(*args, **kwargs)
+            names = treatment.name()
+            values = treatment.compute(data, name)
+            # print names, values
+            if type(names) is list:
+                for i, n in enumerate(names):
+                    dt[n] = values[i]
             else:
-                dt[exp_res_to_colname(name, displayargs, funcs)] = getattr(FuncHelper, funcs)(*args, **kwargs)
-
-    # print dt
+                dt[names] = values
     return dict(params.items() + dt.items() + scenario.items())
-
-
-def printableArgs(oargs, func=None):
-    out = ""
-    if type(oargs) in (tuple, list):
-        if oargs[0] in FuncHelper.FUNC_MAP:
-            out += printableArgs(splitTuple(oargs)[1], func=oargs[0])
-        else:
-            out += "_".join(oargs)
-    elif type(oargs) is dict:
-        out += FuncHelper.getPrintableName(func, **{k: printableArgs(v) for k, v in oargs.iteritems()})
-    else:
-        out += oargs
-
-    return out
-
-
-def reduceArgs(oargs, data, curname):
-    kwargs = {}
-    args = ()
-    # 1 ("renorm", {"x":"connect", "y": ("time", "avg"), "xmap":"id", "ymap":("time", "id")}))
-    # 2 ("func", ("posarg1", "posarg2")
-    # 3 ("col1", "col2")
-    # 4 "col"
-    if type(oargs) in (tuple, list):
-        if oargs[0] in FuncHelper.FUNC_MAP:
-            split = splitTuple(oargs)
-            # nested functions
-            aargs, akwargs = reduceArgs(split[1], data, curname)
-            args = (getattr(FuncHelper, split[0])(*aargs, **akwargs),)
-        else:
-            # 3
-            args = tuple(data[curname].getColumn(a) for a in oargs)
-    elif type(oargs) is dict:
-        for k, v in oargs.iteritems():
-            if type(v) in (tuple, list):
-                name, col = v
-            else:
-                name = curname
-                col = v
-
-            kwargs[k] = data[name].getColumn(col)
-    else:
-        # 4
-        args = (data[curname].getColumn(oargs),)
-
-    return args, kwargs
-
-
-def splitTuple(t):
-    ne = t[1:]
-    if len(ne) == 1:
-        ne = ne[0]
-
-    return t[0], ne
-
-
-import cmd
-
-
-class SqliteShell(cmd.Cmd):
-    PROMPT = "Sqlite (%s) > "
-    OUT = ">> %s"
-
-    def __init__(self, database, db):
-        cmd.Cmd.__init__(self)
-        self.prompt = self.PROMPT % database
-        self.db = db
-
-    def precmd(self, line):
-        """Hook method executed just before the command line is
-        interpreted, but after the input prompt is generated and issued.
-
-        """
-        return line
-
-    def postcmd(self, stop, line):
-        """Hook method executed just after a command dispatch is finished."""
-        return stop
-
-    def preloop(self):
-        """Hook method executed once when the cmdloop() method is called."""
-        pass
-
-    def postloop(self):
-        """Hook method executed once when the cmdloop() method is about to
-        return.
-
-        """
-        pass
-
-    def sql(self, arg):
-        if arg is not None:
-            try:
-                print self.OUT % repr(self.db.read(arg))
-            except sqlite3.Error as e:
-                print e.message
-
-    def disp_data(self, arg):
-        print self.db.table_info("experiments")
-        print self.db.table_content("experiments")
 
 
 def speedAndAcc(fi, x, filtering):
@@ -642,27 +470,9 @@ def makeGraphs(output_dir):
     makeAnticipationGraph(output_dir)
     makeRecenterLeaderGraph(output_dir)
 
-
-import sqlite3
-import io
-
-
-def adapt_array(arr):
-    out = io.BytesIO()
-    np.save(out, arr)
-    out.seek(0)
-    # http://stackoverflow.com/a/3425465/190597 (R. Hill)
-    return buffer(out.read())
-
-
-def convert_array(text):
-    out = io.BytesIO(text)
-    out.seek(0)
-    return np.load(out)
-
-
 if __name__ == "__main__":
-    ACTION_READ = "read"
+
+    # ACTION_READ = "read"
     ACTION_WRITE = "write"
     ACTION_GRAPH = "graph"
     import argparse
@@ -678,10 +488,10 @@ if __name__ == "__main__":
 
     write.add_argument("--database", default="sims.db")
 
-    read = mode.add_parser("read")  #, parents=[parser])
-    read.set_defaults(action=ACTION_READ)
-    read.add_argument("--shell", action = 'store_true', default = False)
-    read.add_argument("--database", default="sims.db")
+    # read = mode.add_parser("read")  #, parents=[parser])
+    # read.set_defaults(action=ACTION_READ)
+    # read.add_argument("--shell", action = 'store_true', default = False)
+    # read.add_argument("--database", default="sims.db")
 
     graph = mode.add_parser("graph")  #, parents=[parser])
     graph.set_defaults(action=ACTION_GRAPH)
@@ -689,18 +499,12 @@ if __name__ == "__main__":
     graph.add_argument("--database", default="sims.db")
 
     opts = parser.parse_args()
-
-    # Converts np.array to TEXT when inserting
-    sqlite3.register_adapter(np.ndarray, adapt_array)
-
-    # Converts TEXT to np.array when selecting
-    sqlite3.register_converter(TypeHelper.CUSTOM_ARRAY, convert_array)
-
-    with Sqlite3(
-            sqlite3.connect(opts.database, detect_types=sqlite3.PARSE_DECLTYPES | sqlite3.PARSE_COLNAMES)) as storage:
-        if opts.action == ACTION_READ:
-            SqliteShell(opts.database, storage).cmdloop()
-        elif opts.action == ACTION_WRITE:
+    p = PandasCsv(opts.database)
+    # with Sqlite3(opts.database) as storage:
+    with p as storage:
+        # if opts.action == ACTION_READ:
+        #     SqliteShell(opts.database, storage).cmdloop()
+        if opts.action == ACTION_WRITE:
             with FileLock(path.join(path.dirname(path.realpath(__file__)), ".db_lock")) as lock:
                 print "Recording results into database"
                 storage.prepare()
@@ -718,12 +522,31 @@ if __name__ == "__main__":
 
                 mkdir(opts.output_dir)
             thegraph = Graph(storage)
-            print thegraph.db
             makeGraphs(opts.output_dir)
 
 
-##
+## ## ## ## ## ## ## ##
 # duree des connections / filtrage connexions courtes ?
 # taux de connexion/deconnexion = nombre/duree de parcours ??
 # taux de connexion road = nombre de connexion/nombre de voitures ???
 # variables "adimentionnees"
+
+# bursts avec taux d'injection voiture 0/1 + tester fonctionnement normal
+# leader bias avec 0.1/0.5
+# regarder taux de connection/nombre de connexions instantanees
+
+# ============== #  /!\
+# phase 1 => visualisation simplifiee (et comparaison ?)
+# phase 2 => test grand nombres + variables interessante
+
+# reprendre les scenarios + speed-diff faire 2x2 voies
+# croiser les scenarios et les techniques
+
+
+# objectifs => scenario classique ? (qu'est-ce que classique ???)
+
+
+# motivations : routage + bouchon (si temps)
+
+
+# ### look at rejection rates for merging.
