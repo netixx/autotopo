@@ -96,9 +96,7 @@ public class TimeScope extends AbstractStatistic {
 
         void recordConnectionNumber(int nConnections, double time) {
             destroyTime = time;
-            if (time == currentTime) {
-                curConn += nConnections;
-            } else {
+            if (time > currentTime) {
                 //start new
                 max = Math.max(curConn, max);
                 min = Math.min(curConn, min);
@@ -107,6 +105,9 @@ public class TimeScope extends AbstractStatistic {
                 s += (curConn - tmpM) * (curConn - m);
                 n++;
                 curConn = nConnections;
+                currentTime = time;
+            } else {
+                curConn += nConnections;
             }
         }
 
