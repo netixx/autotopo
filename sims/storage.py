@@ -18,6 +18,38 @@ class Storage(object):
     def write_row(self, rowdict):
         pass
 
+    def get_data(self):
+        pass
+
+class PandasPickle(Storage):
+
+    def __init__(self, database):
+        self.data = pd.DataFrame()
+        self.database = database
+        self.rowlist = []
+        self.convert = None
+
+    def __enter__(self):
+        if os.path.exists(self.database):
+            self.data = pd.read_pickle(self.database)
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        newdata = pd.DataFrame(self.rowlist)
+        d = pd.concat([self.data, newdata])
+        d.to_pickle(self.database)
+
+    def prepare(self):
+        pass
+
+    def write_row(self, rowdict):
+        self.rowlist.append(rowdict)
+
+    def get_data(self):
+        if self.convert is None:
+            self.convert = self.data.convert_objects(convert_dates=True, convert_numeric=True, convert_timedeltas=True)
+        return self.convert
+
 class PandasCsv(Storage):
 
     def __init__(self, database):
@@ -32,9 +64,8 @@ class PandasCsv(Storage):
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         newdata = pd.DataFrame(self.rowlist)
-        print newdata
         d = pd.concat([self.data, newdata])
-        d.to_csv(self.database)
+        d.to_csv(self.database, index=False)
 
     def prepare(self):
         pass
@@ -42,6 +73,8 @@ class PandasCsv(Storage):
     def write_row(self, rowdict):
         self.rowlist.append(rowdict)
 
+    def get_data(self):
+        return self.data
 ### Sqlite implementation ###
 
 class TypeHelper(object):
@@ -121,6 +154,9 @@ def convert_array(text):
 
 class Sqlite3(Storage):
     table = 'experiments'
+
+    def get_data(self):
+        return self.connection
 
     def __init__(self, database):
         # Converts np.array to TEXT when inserting

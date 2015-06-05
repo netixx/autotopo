@@ -37,7 +37,7 @@ class _GnuplotGraph(type):
     def decorate(cls, *args, **kwargs):
         pass
 
-    def make(cls, figure, x, y, yerr = None, color = None, legend = None):
+    def drawXY(cls, figure, x, y, yerr = None, color = None, legend = None):
         # d = cls.gp.Data(x, y, title = legend)
         figure.add(cls.pl.gpSinglePlot(np.transpose([x, y]), rawdata=True))
         # if legend is not None:
@@ -57,7 +57,7 @@ class _GnuplotGraph(type):
         return g
         # from matplotlib.backends.backend_pdf import PdfPages
         #
-        # print('Creating new graph at %s\n' % path)
+        # print('Creating new graph at %s' % path)
         # return PdfPages(path)
 
     @staticmethod
@@ -170,21 +170,37 @@ class _PyplotGraph(type):
         # self.gr.margins(x = 0.05, y = 0.05)
         graph.margins(*margins)
 
-    def make(cls, figure, x, y, yerr = None, color = None, legend = None):
+    def drawXY(cls, figure, x, y, yerr = None, color = None, legend = None, style = None):
+        kwargs = {'yerr' : yerr}
         if legend is not None:
-            figure.gca().errorbar(x, y, yerr = yerr, color = color, label = cls.wrapLegend(legend))
-        else:
-            figure.gca().errorbar(x, y, yerr = yerr)
+            kwargs['label'] = cls.wrapLegend(legend)
+        if color is not None:
+            kwargs['color'] = color
+        if style is not None:
+            kwargs['fmt'] = style
+        # if style is not None:
+        #     p[-1][0].set_linestyle(style)
+        figure.gca().errorbar(x, y, **kwargs)
         cls.setMargins(figure.gca())
         if x.size < 20:
             figure.gca().set_xticks(x)
             # cls.removeScale({}, x)
 
+    def drawYLine(cls, figure,  y=None, width = None, style = None, color = None):
+        # from matplotlib.lines import Line2D
+        # figure.gca().add_line(Line2D(x, y, linewidth = width, linestyle = style, color = color))
+        figure.gca().axhline(y=y,  linewidth = width, color = color, linestyle=style)
+
+
+
+    def drawSteps(cls, figure, x, y, legend):
+        figure.gca().step(x, y, label = legend)
+
     @staticmethod
     def newFile(path):
         from matplotlib.backends.backend_pdf import PdfPages
 
-        print('Creating new graph at %s\n' % path)
+        print('Creating new graph at %s' % path)
         return PdfPages(path)
 
     @staticmethod
@@ -198,7 +214,7 @@ class _PyplotGraph(type):
         d['Keywords'] = 'autotopo'
         d['ModDate'] = datetime.datetime.today()
         pdf.close()
-        print("Graph successfully written\n\n")
+        print("Graph successfully written\n")
 
     @classmethod
     def newFigure(cls):
@@ -221,6 +237,8 @@ class CsvBackend(object):
 
 class GraphBackend(object):
     """Properties for making graphs and interface to graph object"""
+
+    TITLE_WRAP_WIDTH = 60
 
     __metaclass__ = _PyplotGraph
     # __metaclass__ = _GnuplotGraph
@@ -283,6 +301,48 @@ class GraphBackend(object):
     #     return o
 
 
+    @classmethod
+    def wrapTitle(cls, title):
+        return "\n".join(textwrap.wrap(title, cls.TITLE_WRAP_WIDTH))
+
+
+    @classmethod
+    def printTitle(cls, title, variables = None, filtering = None):
+        return cls.wrapTitle(
+            title.format(variables = variables if variables and len(variables) > 0 else "",
+                         filtering = "with %s" % filtering if filtering is not None and len(filtering) > 0 else "")
+        )
+
+    @staticmethod
+    def printParams(params, additionalString = None, removeZeros = True):
+        out = []
+        for k, v in params.iteritems():
+            if type(v) in (tuple, list):
+                o = repr(v)
+            else:
+                o = v
+            if removeZeros and v:
+                out.append("%s=%s" % (k.replace("MetricWeight", ""), o))
+        s = ", ".join(out)
+        if additionalString is not None and len(additionalString) > 0:
+            s = ", ".join((s, additionalString)) if len(s) > 0 else additionalString
+        return s
+
+    @staticmethod
+    def printVariables(variables, addiionalString = None):
+        out = []
+        for v in variables.keys():
+            if type(v) in (tuple, list):
+                o = repr(v)
+            else:
+                o = v
+            out.append("%s" % o)
+        s = ", ".join(out)
+        if addiionalString is not None and len(addiionalString) > 0:
+            s = ", ".join((s, addiionalString))
+        return s
+
+
 # def logGraph(func):
 #     def f(self, **kwargs):
 #         print("Making new graph %s with %s%s%s ... " % (
@@ -299,10 +359,150 @@ class GraphBackend(object):
 FUNC="func"
 NAME="name"
 
-class Graph(object):
+class PandasGraph(object):
     backend = GraphBackend
 
-    TITLE_WRAP_WIDTH = 60
+    def __init__(self, storage):
+        self.storage = storage
+
+    # def makeWhere(self, x, y, params, filtering):
+    #     where = []
+    #     for l in (x, y, filtering):
+    #         for ak, av in l.iteritems():
+    #             if av is not None:
+    #                 if type(av) in (tuple, list):
+    #                     where.append("(%s <= '%s' <= %s)"%(av[0], ak, av[1]))
+    #                 elif type(av) is str:
+    #                     where.append("('%s' == '%s')"%(ak, av))
+    #                 else:
+    #                     where.append("('%s' == %s)"%(ak, av))
+    #
+    #     for pk, pv in params.iteritems():
+    #         if pv is not None:
+    #             where.append("|".join("('%s' == %s)"%(pk, apv) for apv in pv))
+    #     return " & ".join(where)
+
+    def makeWhere(self, data, filters = None, params = None):
+        where = data
+        if filters is not None:
+            for ak, av in filters.iteritems():
+                if av is not None:
+                    if type(av) in (tuple, list):
+                        where = where[(av[0] <=where[ak]) & (where[ak] <= av[1])]
+                    else:
+                        where = where[where[ak] == av]
+        if params is not None:
+            for pk, pv in params.iteritems():
+                if pv is not None:
+                    orr = True
+                    for apv in pv:
+                        orr |= (where[pk] == apv)
+                    where = where[orr]
+
+        return where
+
+
+    def xy(self, document = None, x = None, y = None, parameters = None, filtering = None, default = None):
+        data = self.storage.get_data()
+        # print data.columns.values
+        d = self.makeWhere(data, filters = dict(x.items() + y.items() + filtering.items()), params = parameters)
+        agg = d.groupby(parameters.keys())[x.keys()+y.keys()+parameters.keys()]
+        # agg = d.groupby(parameters.keys()+x.keys())
+        colDict = {}
+
+        defagg = None
+        if default is not None:
+            fil = dict(filtering.items())
+            fil.update(default)
+            defvalues = self.makeWhere(data, filters=fil, params = parameters)[x.keys()+y.keys()+parameters.keys()]
+            defagg = defvalues.groupby(parameters.keys())
+
+        for ax in x.keys():
+            fig = self.backend.newFigure()
+            try:
+                for key, grp in agg:
+                    agg2 = grp.groupby([ax])[[ax]+y.keys()]
+                    avgs = agg2.mean()
+                    stds = agg2.std()
+                    # print "avgsx", avgs[ax].values
+                    # print "avgs", avgs[y.keys()].values
+                    # print "stds", stds[y.keys()].values
+                    for ky in y.iterkeys():
+                        self.backend.drawXY(fig, avgs[ax].values, avgs[ky].values, yerr = stds[ky].values, color = self.backend.getColor(key+ky, colDict), legend = ky+self.leg(parameters.keys(), key))
+
+                if defagg is not None:
+                    for dkey, dgrp in defagg:
+                        avg = dgrp[y.keys()].mean()
+                        std = dgrp[y.keys()].std()
+                        for ky in y.iterkeys():
+                            self.backend.drawYLine(fig, y=avg[ky], color = self.backend.getColor(dkey+ky, colDict), style= "--", width = 0.8)
+                            self.backend.drawYLine(fig, y=(avg[ky]+std[ky]), color = self.backend.getColor(dkey+ky, colDict), style=":", width = 0.5)
+                            self.backend.drawYLine(fig, y=(avg[ky]-std[ky]), color = self.backend.getColor(dkey+ky, colDict), style=":", width = 0.5)
+
+
+                self.backend.decorate(g_xlabel = ax,
+                                      g_ylabel = y.keys(),
+                                      g_ygrid = True,
+                                      g_title = self.backend.printTitle("Sensitivity analysis of {variables} wrt %s {filtering}" % ax,
+                                                                        self.backend.printVariables(y),
+                                                                        self.backend.printParams(filtering)),
+                )
+                self.backend.saveFigure(document, fig)
+            except:
+                self.backend.close(fig)
+                raise
+
+
+    LEGEND_TPL = Template("${key}=${val}")
+    def leg(self, key, val):
+        if type(val) in (tuple, list):
+            return ", ".join(self.LEGEND_TPL.substitute(key = key[i], val = val[i]) for i,v in enumerate(key))
+        return self.LEGEND_TPL.substitute(key = key, val = val)
+
+    def xycompare(self, document = None, xy = None, parameters = None, filtering = None, default = None):
+        data = self.storage.get_data()
+        # print data.columns.values
+        d = self.makeWhere(data, filters = filtering, params=parameters)
+        agg = d.groupby(parameters.keys())[xy.keys() + parameters.keys()]
+
+        defagg = None
+        if default is not None:
+            fil = dict(filtering.items())
+            fil.update(default)
+            defvalues = self.makeWhere(data, filters = fil, params = parameters)[xy.keys() + parameters.keys()]
+            defagg = defvalues.groupby(parameters.keys())
+
+        colDict = {}
+        for axy in xy:
+            fig = self.backend.newFigure()
+            try:
+                for key, grp in agg:
+                    vals = grp[axy].values
+                    for val in vals:
+                        self.backend.drawXY(fig, val[0], val[1], color = self.backend.getColor(key, colDict), legend = self.leg(parameters.keys(), key))
+
+                if defagg is not None:
+                    for dkey, dgrp in defagg:
+                        vals = dgrp[axy].values
+                        for val in vals:
+                            self.backend.drawXY(fig, val[0], val[1], color = self.backend.getColor(dkey, colDict), style = '-.', legend = "default "+self.leg(parameters.keys(), dkey))
+                self.backend.decorate(g_xlabel = "",
+                                      g_ylabel = "",
+                                      g_ygrid = True,
+                                      g_title = self.backend.printTitle("Comparison of %s {variables} {filtering}" % axy,
+                                                                        "",
+                                                                        self.backend.printParams(filtering)),
+                                      )
+
+                self.backend.saveFigure(document, fig)
+            except:
+                self.backend.close(fig)
+                raise
+
+
+class SQLiteGraph(object):
+    backend = GraphBackend
+
 
     POST_FUNC = {
         "divide" : {
@@ -431,47 +631,6 @@ class Graph(object):
     def __init__(self, db):
         self.db = db
 
-    @classmethod
-    def wrapTitle(cls, title):
-        return "\n".join(textwrap.wrap(title, cls.TITLE_WRAP_WIDTH))
-
-
-    @classmethod
-    def printTitle(cls, title, variables = None, filtering = None):
-        return cls.wrapTitle(
-            title.format(variables = variables if variables and len(variables) > 0 else "",
-                         filtering = "with %s" % filtering if filtering is not None and len(filtering) > 0 else "")
-        )
-
-    @staticmethod
-    def printParams(params, additionalString = None, removeZeros = True):
-        out = []
-        for k, v in params.iteritems():
-            if type(v) in (tuple, list):
-                o = repr(v)
-            else:
-                o = v
-            if removeZeros and v:
-                out.append("%s=%s" % (k.replace("MetricWeight", ""), o))
-        s = ", ".join(out)
-        if additionalString is not None and len(additionalString) > 0:
-            s = ", ".join((s, additionalString)) if len(s) > 0 else additionalString
-        return s
-
-    @staticmethod
-    def printVariables(variables, addiionalString = None):
-        out = []
-        for v in variables.keys():
-            if type(v) in (tuple, list):
-                o = repr(v)
-            else:
-                o = v
-            out.append("%s" % o)
-        s = ", ".join(out)
-        if addiionalString is not None and len(addiionalString) > 0:
-            s = ", ".join((s, addiionalString))
-        return s
-
     def _query(self, x = None, y = None, parameters = None, filtering = None, distinct = False):
         # query db to get n-d array to plot
         query = self.QueryBuilder('experiments')
@@ -570,14 +729,14 @@ class Graph(object):
             colDict = {}
             for ay in y.iterkeys():
                 px, py, pstdy = self.mergeAlong(data, rowalong = cmap[ax], what = cmap[ay])
-                self.backend.make(fig, px, py, yerr = pstdy, color = self.backend.getColor(ay, colDict),legend = ay)
+                self.backend.drawXY(fig, px, py, yerr = pstdy, color = self.backend.getColor(ay, colDict),legend = ay)
                 # cls.backend.make(fig, datax, data[cmap[ay]], legend = cls.wrapLegend(ay))
                 self.backend.decorate(g_xlabel = ax,
                                      g_ylabel = ay,
                                      g_ygrid = True,
-                                     g_title = self.printTitle("Sensitivity analysis of {variables} wrt %s {filtering}" % ax,
-                                                              self.printVariables(y),
-                                                              self.printParams(filtering)),
+                                     g_title = self.backend.printTitle("Sensitivity analysis of {variables} wrt %s {filtering}" % ax,
+                                                              self.backend.printVariables(y),
+                                                              self.backend.printParams(filtering)),
                                      )
             # cls.backend.setLegend()
 
@@ -598,10 +757,10 @@ class Graph(object):
         vals = [np.array(v, dtype = float) for v in tmpData.values()]
         tmpy = np.array([np.mean(v) for v in vals])
         tmpstd = np.array([np.std(v) for v in vals])
-        d = Graph.sort(np.array([tmpx, tmpy, tmpstd]), row = 0)
+        d = cls.sort(np.array([tmpx, tmpy, tmpstd]), row = 0)
         return d[0], d[1], d[2]
 
-    def cdfs(self, document = None, x = None, y = None, parameters = None, filtering = None):
+    def xycompare(self, document = None, x = None, y = None, parameters = None, filtering = None):
         """
         format : {"var" : range} where range = [None | [min, max]]
         :param document:
@@ -623,13 +782,13 @@ class Graph(object):
                     leg = str(res[cmap[ax]])
                     data = res[cmap[ay]]
                     if data is not None:
-                        self.backend.make(fig, x=data[0], y=data[1], color = self.backend.getColor(leg, colDict),legend = ax+"="+leg)
+                        self.backend.drawXY(fig, x=data[0], y=data[1], color = self.backend.getColor(leg, colDict),legend = ax+"="+leg)
                 self.backend.decorate(g_xlabel = "",
                                      g_ylabel = "cdf",
                                      g_ygrid = True,
-                                     g_title = self.printTitle("Sensitivity analysis of {variables} wrt %s {filtering}" % ax,
+                                     g_title = self.backend.printTitle("Sensitivity analysis of {variables} wrt %s {filtering}" % ax,
                                                               ay,
-                                                              self.printParams(filtering)),
+                                                              self.backend.printParams(filtering)),
                                      )
                 # self.backend.setLegend()
                 self.backend.saveFigure(document, fig)

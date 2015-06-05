@@ -102,7 +102,7 @@ class Function(object):
         if self.posparams is not None:
             for pparam in self.posparams:
                 #param is a function
-                if type(pparam) is type(self):
+                if isinstance(pparam, Function):
                     #invoke function recursively
                     args.append(pparam.compute(data, defname))
                 else:
@@ -111,11 +111,8 @@ class Function(object):
                     args.append(data[defname].getColumn(pparam))
         if self.kwparams is not None:
             for k, v in self.kwparams.iteritems():
-                if type(v) is type(self):
+                if isinstance(v, Function):
                     kwargs[k] = v.compute(data, defname)
-                elif type(v) in (tuple, list):
-                    name, col = v
-                    kwargs[k] = data[name].getColumn(col)
                 else:
                     #get column data
                     kwargs[k] = data[defname].getColumn(v)
@@ -136,3 +133,21 @@ class Function(object):
         args = [str(p) for p in self.posparams] if self.posparams is not None else []
         kwargs = {k: str(v) for k, v in self.kwparams.iteritems()} if self.kwparams is not None else {}
         return FuncHelper.getPrintableName(self.func, *args, **kwargs)
+
+
+class Fetch(Function):
+    def __init__(self, name, col):
+        Function.__init__(self, "fetch")
+        self.name = name
+        self.col = col
+
+
+    def compute(self, data, defname):
+        return data[self.name].getColumn(self.col)
+
+
+    def name(self):
+        return repr(self)
+
+    def __repr__(self):
+        return "%s(%s)"%(self.name, self.col)
