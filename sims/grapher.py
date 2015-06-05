@@ -428,16 +428,16 @@ class PandasGraph(object):
                     # print "avgs", avgs[y.keys()].values
                     # print "stds", stds[y.keys()].values
                     for ky in y.iterkeys():
-                        self.backend.drawXY(fig, avgs[ax].values, avgs[ky].values, yerr = stds[ky].values, color = self.backend.getColor(key+ky, colDict), legend = ky+self.leg(parameters.keys(), key))
+                        self.backend.drawXY(fig, avgs[ax].values, avgs[ky].values, yerr = stds[ky].values, color = self.backend.getColor(str(key)+ky, colDict), legend = ky+self.leg(parameters.keys(), key))
 
                 if defagg is not None:
                     for dkey, dgrp in defagg:
                         avg = dgrp[y.keys()].mean()
                         std = dgrp[y.keys()].std()
                         for ky in y.iterkeys():
-                            self.backend.drawYLine(fig, y=avg[ky], color = self.backend.getColor(dkey+ky, colDict), style= "--", width = 0.8)
-                            self.backend.drawYLine(fig, y=(avg[ky]+std[ky]), color = self.backend.getColor(dkey+ky, colDict), style=":", width = 0.5)
-                            self.backend.drawYLine(fig, y=(avg[ky]-std[ky]), color = self.backend.getColor(dkey+ky, colDict), style=":", width = 0.5)
+                            self.backend.drawYLine(fig, y=avg[ky], color = self.backend.getColor(str(dkey)+ky, colDict), style= "--", width = 0.8)
+                            self.backend.drawYLine(fig, y=(avg[ky]+std[ky]), color = self.backend.getColor(str(dkey)+ky, colDict), style=":", width = 0.5)
+                            self.backend.drawYLine(fig, y=(avg[ky]-std[ky]), color = self.backend.getColor(str(dkey)+ky, colDict), style=":", width = 0.5)
 
 
                 self.backend.decorate(g_xlabel = ax,
