@@ -8,108 +8,92 @@ import csv
 import numpy as np
 from string import Template
 
-from grapher import Graph
-from storage import FileLock, Sqlite3, PandasCsv
-from processing import FILE, TREATMENT, COLS, Function
+from grapher import PandasGraph as Graph
+from storage import FileLock, Sqlite3, PandasCsv, PandasPickle, PandasJson, PandasHDF, RawStorage, ProcessedStorage, Zip
+from processing import FILE, TREATMENT, COLS, Function, Fetch
+from collections import OrderedDict
 
-
-RESULT_COLNAME_TPL = Template("${var}_${col}_${func}")
-
-def exp_res_to_colname(var, col, func):
-    return RESULT_COLNAME_TPL.substitute(var=var,
-                                         col=col,
-                                         func=func)
-
-DATA_DESCRIPTION = {
-    "speed": {
+DATA_DESCRIPTION = OrderedDict([
+    ("speed", {
         FILE: "speed.csv",
         TREATMENT: [
             Function(("avg", "std", "cdf"), posparams="avg"),
         ],
-    },
-    "acc": {
+    }),
+    ("acc", {
         TREATMENT: [
             Function(("avg", "cdf"), posparams="cumulatedPlus"),
             Function(("avg", "cdf"), posparams="cumulatedMinus"),
         ],
         FILE: "acceleration.csv",
-    },
-    # "agentConn": {
-    #     TREATMENT: [
-    #         Function(("avg", "min", "max", "cdf"),
-    #          posparams = Function("divide", kwparams={"num": "connect", "den": ("time", "time"), "nummap": "id", "denmap": ("time", "id")})
-    #         )
-    #     ],
-    #     FILE: "agentConnections.csv",
-    # },
-    "agentInstConn": {
-        TREATMENT: [
-            Function(("avg", "cdf"), posparams="avg"),
-            Function("max", posparams="max")
-        ],
-        FILE: "agentsInstantConnections.csv",
-    },
-    # "roadConn": {
-    #     TREATMENT: [
-    #         Function("sum", posparams="connect")
-    #     ],
-    #     FILE: "roadSegmentConnections.csv"
-    # },
-    # "roadInstConn": {
-    #     TREATMENT: [
-    #         Function("sum", posparams="avg")
-    #     ],
-    #     FILE: "roadSegmentInstantConnections.csv"
-    # },
-    "time": {
+    }),
+    ("time", {
         TREATMENT: [
             Function(("avg", "cdf"), posparams="time")
         ],
         FILE: "time.csv"
-    },
-    "timeAgentConn": {
+    }),
+    ("numbers", {
+        TREATMENT: [Function("xy", posparams=("time", "number"))],
+        FILE:"numbers.csv"
+    }),
+    ("timeRoadConn", {
+        TREATMENT: [
+            # Function(('avg', 'cdf'), posparams="avg"),
+            Function("xy", posparams=("time", Function("divide",
+                                                       kwparams={"num" : "avg", "den" : Fetch("numbers", "number"),
+                                                                 "nummap" : "time", "denmap" : Fetch("numbers", "time")})))
+        ],
+        FILE: "timeSegmentInstantConnections.csv"
+    }),
+    ("agentConn", {
+        TREATMENT: [
+            Function(("avg", "max", "cdf"),
+             posparams = Function("divide", kwparams={"num": "connect", "den": Fetch("time", "time"), "nummap": "id", "denmap": Fetch("time", "id")})
+            )
+        ],
+        FILE: "agentConnections.csv",
+    }),
+    ("roadConn", {
+        TREATMENT: [
+            Function("sum", posparams= Function("divide", kwparams={"num" : "connect", "den" : Function("len", posparams=Fetch("agentConn", "id"))}))
+        ],
+        FILE: "roadSegmentConnections.csv"
+    }),
+    ("agentInstConn", {
+        TREATMENT: [
+            Function(("avg", "cdf"), posparams = "avg"),
+            # Function("max", posparams = "max")
+        ],
+        FILE: "agentsInstantConnections.csv",
+    }),
+    ("roadInstConn", {
+        TREATMENT: [
+            Function("sum", posparams = "avg")
+        ],
+        FILE: "roadSegmentInstantConnections.csv"
+    }),
+    ("timeAgentConn", {
         TREATMENT: [
             Function(("avg", "cdf"), posparams="avg"),
-            Function("xy", posparams=("time", "avg"))
+            # Function("xy", posparams=("time", "avg"))
         ],
         FILE: "timeAgentsInstantConnections.csv"
-    },
-    # "timeRoadConn": {
-    #     TREATMENT: [
-    #         Function(('avg', 'cdf'), posparams="avg"),
-    #         Function("xy", posparams=("time", "avg"))
-    #     ],
-    #     FILE: "timeSegmentInstantConnections.csv"
-    #
-    # },
-    # # "positions" : {
-    # #     TREATMENT : [
-    # #         ("xy", ('time', ('len', 'positions')))
-    # #     ],
-    # #     FILE : "positions.csv",
-    # #     COLS : {"time":float,
-    # #             "positions": ast.literal_eval}
-    # # },
-    # "numbers": {
-    #     TREATMENT: [
-    #         ("xy", ('time', 'number'))
-    #     ],
-    #     FILE: "numbers.csv"
-    # },
-    "scopes": {
+    }),
+    ("scopes", {
         TREATMENT: [
-            Function("avg", posparams = Function("minus", posparams= ("delete", "create"))),
-            Function("cdf", posparams=
-                Function("mul", posparams = (
-                    Function("minus", posparams = ("delete", "create")),
-                    "avg"
-                )
+            Function(("cdf", "avg"), posparams = Function("minus", posparams = ("delete", "create"))),
+            Function(("cdf", "avg"), posparams = Function("mul", posparams = (
+                Function("minus", posparams = ("delete", "create")),
+                "avg"
+            )
             )
             ),
+            Function("cdf", posparams="avg")
         ],
         FILE: "timeScope.csv"
-    }
-}
+    })
+])
 
 
 class CsvReader():
@@ -173,10 +157,10 @@ def getParameters(propfile):
     return d
 
 
-def getScenario(scenario):
+def getScenario(scenario, root):
     from xml.dom import minidom
 
-    out = {"scenario": scenario}
+    out = {"scenario": os.path.relpath(scenario, root)}
     xmldoc = minidom.parse(scenario)
     sc = xmldoc.getElementsByTagName('Simulation')[0]
     out['duration'] = float(sc.getAttribute('duration'))
@@ -201,281 +185,417 @@ def getScenario(scenario):
         meanqw.append(qs[0].max() - qs[0].min())
         meanspeedval.append(np.trapz(y=vs[1], x=vs[0]))
         meanspeedw.append(vs[0].max() - vs[0].min())
-    # print meanflow
     out['inflow_mean_speed'] = np.average(meanspeedval, weights=meanspeedw) / np.mean(meanspeedw)
     out['inflow_mean_q'] = np.average(meanqval, weights=meanqw) / np.mean(meanqw)
 
     return out
 
+COL_TPL=Template("${name}_${treat}")
 
 def crunchResults(params, scenario, data):
     dt = {}
     # leave params as is
     for name, values in data.iteritems():
-        for treatment in DATA_DESCRIPTION[name][TREATMENT]:
-            names = treatment.name()
-            values = treatment.compute(data, name)
-            # print names, values
-            if type(names) is list:
-                for i, n in enumerate(names):
-                    dt[n] = values[i]
-            else:
-                dt[names] = values
+        if DATA_DESCRIPTION[name].has_key(TREATMENT):
+            for treatment in DATA_DESCRIPTION[name][TREATMENT]:
+                names = treatment.name()
+                values = treatment.compute(data, name)
+                # print names, values
+                if type(names) is list:
+                    for i, n in enumerate(names):
+                        col = COL_TPL.substitute(name=name, treat=n)
+                        dt[col] = values[i]
+                else:
+                    col = COL_TPL.substitute(name=name, treat=names)
+                    dt[col] = values
     return dict(params.items() + dt.items() + scenario.items())
 
-
-def speedAndAcc(fi, x, filtering):
-    thegraph.xy(fi,
-                x={x: None},
-                y={exp_res_to_colname("speed", "avg", "avg"): None},
-                parameters={},
-                filtering=filtering)
-
-    thegraph.cdfs(fi,
-                  x={x: None},
-                  y={exp_res_to_colname("speed", "avg", "cdf"): None},
-                  parameters={},
-                  filtering=filtering)
-
-    thegraph.cdfs(fi,
-                  x={x: None},
-                  y={exp_res_to_colname("acc", "cumulatedPlus", "cdf"): None,
-                     exp_res_to_colname("acc", "cumulatedMinus", "cdf"): None},
-                  parameters={},
-                  filtering=filtering)
-
-
-def connections(fi, x, filtering):
-    thegraph.xy(fi,
-                x={x: None},
-                y={exp_res_to_colname("agentInstConn", "avg", "avg"): None},
-                parameters={},
-                filtering=filtering)
-
-    thegraph.cdfs(fi,
-                  x={x: None},
-                  y={exp_res_to_colname("agentInstConn", "avg", "cdf"): None},
-                  parameters={},
-                  filtering=filtering)
-
-    thegraph.xy(fi,
-                x={x: None},
-                y={exp_res_to_colname("roadInstConn", "avg", "sum"): None},
-                parameters={},
-                filtering=filtering)
-
-    thegraph.xy(fi,
-                x={x: None},
-                y={"agentConn_connect/time_time_avg": None},
-                parameters={},
-                filtering=filtering)
-
-    thegraph.xy(fi,
-                x={x: None},
-                y={exp_res_to_colname("roadConn", "connect", "sum"): None},
-                parameters={},
-                filtering=filtering)
-
-    thegraph.xy(fi,
-                x={x: None},
-                y={
-                    "divide": {
-                        "num": {exp_res_to_colname("agentInstConn", "avg", "avg"): None},
-                        "denom": {exp_res_to_colname("roadConn", "connect", "sum"): None}
-                    }
-                },
-                parameters={},
-                filtering=filtering
-                )
-
-    thegraph.xy(fi,
-                x={x: None},
-                y={
-                    "divide": {
-                        "num": {exp_res_to_colname("roadInstConn", "avg", "sum"): None},
-                        "denom": {exp_res_to_colname("roadConn", "connect", "sum"): None}
-                    }
-                },
-                parameters={},
-                filtering=filtering
-                )
-
-    thegraph.cdfs(fi,
-                  x={x: None},
-                  y={exp_res_to_colname("timeAgentConn", "time_avg", "xy"): None},
-                  parameters={},
-                  filtering=filtering)
-
-    thegraph.cdfs(fi,
-                  x={x: None},
-                  y={exp_res_to_colname("timeRoadConn", "time_avg", "xy"): None},
-                  parameters={},
-                  filtering=filtering)
+# def compareConfig(output_dir, graph):
+#     defaultBias = 0
+#     defaultPeriod = 0
+#     defaultSpeedClust = 0
+#     defaults = {
+#         "optimize.agent.recenter-leader.enabled": 'false',
+#         "optimize.roadsegment.speed-clustering.enabled": 'false',
+#         "roadsegments.trafficjam.enabled": 'false',
+#         "optimize.anticipation.position.seconds": 0
+#     }
+#
+#     recenterLeaderPeriod = graph.backend.newDocument(path.join(output_dir, "recenter_leader_period.pdf"))
+#
+#     graph.xy(recenterLeaderPeriod,
+#              x = {"optimize.agent.recenter-leader.period": None},
+#              y = {"scopes_avg((delete-create)*avg)": None},
+#              parameters = {"agent.connections.distance.max": None},
+#              filtering = {"optimize.agent.recenter-leader.enabled": 'true',
+#                           "optimize.roadsegment.speed-clustering.enabled": 'false',
+#                           "optimize.agent.recenter-leader.bias": defaultBias
+#              },
+#              default = defaults
+#     )
+#
+#     graph.backend.closeDocument(recenterLeaderPeriod)
 
 
-def makeSpeedGraph(output_dir):
-    speed = thegraph.backend.newFile(path.join(output_dir, "speedFact.pdf"))
-    speedAndAcc(speed, "roadsegments.trafficjam.speed-limit.factor",
-                {
-                    "roadsegments.trafficjam.enabled": "true",
-                    "roadsegments.trafficjam.interjamdistance": 1000,
-                    "roadsegments.trafficjam.jamfactor": 0.1,
+def makeGraphs(output_dir, graph):
+    defaultBias = 0
+    defaultPeriod = 0
+    defaultSpeedClust = 0
+    defaults = {
+        "optimize.agent.recenter-leader.enabled": 'false',
+        "optimize.roadsegment.speed-clustering.enabled": 'false',
+        "roadsegments.trafficjam.enabled": 'false',
+        "optimize.anticipation.position.seconds" : 0
+    }
+    recenterLeaderBias = graph.backend.newDocument(path.join(output_dir, "recenter_leader_bias"))
+    graph.xy(recenterLeaderBias,
+             x = {"optimize.agent.recenter-leader.bias": None},
+             y = {"scopes_avg((delete-create))" : None},
+             parameters = {"scenario" : None},
+             filtering= {"optimize.agent.recenter-leader.enabled" : 'true',
+                         "optimize.roadsegment.speed-clustering.enabled": 'false',
+                         "optimize.agent.recenter-leader.period" : defaultPeriod
+             },
+             default = defaults
+    )
 
-                    "agent.trafficjam.speed-limit.distance": 1000,
+    graph.xy(recenterLeaderBias,
+             x = {"optimize.agent.recenter-leader.bias": None},
+             y = {"scopes_avg((delete-create)*avg)": None},
+             parameters = {"scenario": None},
+             filtering = {"optimize.agent.recenter-leader.enabled": 'true',
+                          "optimize.roadsegment.speed-clustering.enabled": 'false',
+                          "optimize.agent.recenter-leader.period": defaultPeriod
+             },
+             default = defaults
+    )
 
-                    "optimize.agent.recenter-leader.enabled": "false",
-                    "optimize.roadsegment.speed-clustering.enabled": "false",
+    graph.xy(recenterLeaderBias,
+             x = {"optimize.agent.recenter-leader.bias": None},
+             y = {"roadConn_sum(connect/len(agentConn(id)))": None},
+             parameters = {"scenario": None},
+             filtering = {"optimize.agent.recenter-leader.enabled": 'true',
+                          "optimize.roadsegment.speed-clustering.enabled": 'false',
+                          "optimize.agent.recenter-leader.period": defaultPeriod
+             },
+             default = defaults
+    )
 
-                }
-                )
-    thegraph.backend.closePdf(speed)
+    graph.xycompare(recenterLeaderBias,
+               xy = {"scopes_cdf((delete-create)*avg)" : None},
+               parameters = {"optimize.agent.recenter-leader.bias": None},
+               filtering = {"optimize.agent.recenter-leader.enabled": 'true',
+                            "optimize.roadsegment.speed-clustering.enabled": 'false',
+                            "scenario" : "large-10.xprj",
+                            "optimize.agent.recenter-leader.period": defaultPeriod
+               },
+               default = defaults
+    )
+
+    graph.xycompare(recenterLeaderBias,
+                    xy = {"scopes_cdf((delete-create)*avg)": None},
+                    parameters = {"scenario" : None},
+                    filtering = {"optimize.agent.recenter-leader.enabled": 'true',
+                                 "optimize.agent.recenter-leader.bias": defaultBias,
+                                 "optimize.roadsegment.speed-clustering.enabled": 'false'
+                    },
+                    default = defaults
+    )
+
+    graph.backend.closeDocument(recenterLeaderBias)
+
+    recenterLeaderPeriod = graph.backend.newDocument(path.join(output_dir, "recenter_leader_period"))
+
+    graph.xy(recenterLeaderPeriod,
+             x = {"optimize.agent.recenter-leader.period": None},
+             y = {"scopes_avg((delete-create))": None},
+             parameters = {"scenario": None},
+             filtering = {"optimize.agent.recenter-leader.enabled": 'true',
+                          "optimize.roadsegment.speed-clustering.enabled": 'false',
+                          "optimize.agent.recenter-leader.bias" : defaultBias
+             },
+             default = defaults
+    )
+
+    graph.xy(recenterLeaderPeriod,
+             x = {"optimize.agent.recenter-leader.period": None},
+             y = {"scopes_avg((delete-create)*avg)": None},
+             parameters = {"scenario": None},
+             filtering = {"optimize.agent.recenter-leader.enabled": 'true',
+                          "optimize.roadsegment.speed-clustering.enabled": 'false',
+                          "optimize.agent.recenter-leader.bias": defaultBias
+             },
+             default = defaults
+    )
+
+    graph.xy(recenterLeaderPeriod,
+             x = {"optimize.agent.recenter-leader.period": None},
+             y = {"roadConn_sum(connect/len(agentConn(id)))": None},
+             parameters = {"scenario": None},
+             filtering = {"optimize.agent.recenter-leader.enabled": 'true',
+                          "optimize.roadsegment.speed-clustering.enabled": 'false',
+                          "optimize.agent.recenter-leader.bias": defaultBias
+             },
+             default = defaults
+    )
+
+    graph.xycompare(recenterLeaderPeriod,
+                    xy = {"scopes_cdf((delete-create)*avg)": None},
+                    parameters = {"optimize.agent.recenter-leader.period": None},
+                    filtering = {"optimize.agent.recenter-leader.enabled": 'true',
+                                 "optimize.roadsegment.speed-clustering.enabled": 'false',
+                                 "scenario": "large-10.xprj",
+                                 "optimize.agent.recenter-leader.bias": defaultBias
+                    },
+                    default = defaults
+    )
+
+    graph.xycompare(recenterLeaderPeriod,
+                    xy = {"scopes_cdf((delete-create)*avg)": None},
+                    parameters = {"scenario": None},
+                    filtering = {"optimize.agent.recenter-leader.enabled": 'true',
+                                 "optimize.agent.recenter-leader.period": 0,
+                                 "optimize.roadsegment.speed-clustering.enabled": 'false',
+                                 "optimize.agent.recenter-leader.bias": defaultBias
+                    },
+                    default = defaults
+    )
 
 
-def makeJamGraph(output_dir):
-    jamFact = thegraph.backend.newFile(path.join(output_dir, "jamFactor.pdf"))
-    speedAndAcc(jamFact, "roadsegments.trafficjam.jamfactor",
-                {
-                    "roadsegments.trafficjam.enabled": "true",
-                    "roadsegments.trafficjam.interjamdistance": 1000,
-                    "roadsegments.trafficjam.speed-limit.factor": 0.8,
 
-                    "agent.trafficjam.speed-limit.distance": 1000,
-                    "optimize.agent.recenter-leader.enabled": "false",
-                    "optimize.roadsegment.speed-clustering.enabled": "false",
-                }
-                )
-    thegraph.backend.closePdf(jamFact)
+    graph.backend.closeDocument(recenterLeaderPeriod)
 
+    speedClust = graph.backend.newDocument(path.join(output_dir, "speed_clustering"))
+    #duree de vie des scopes
+    graph.xy(speedClust,
+             x = {"optimize.roadsegment.speed-clustering.factor": None},
+             y = {"scopes_avg((delete-create))": None},
+             parameters = {"scenario" : None},
+             filtering = {"optimize.roadsegment.speed-clustering.enabled": 'true',
+                          "optimize.agent.recenter-leader.enabled": 'false',
+                          # "scenario": "/Users/francois/Developpement/Projets/autotopo/sims/scenarios/batch-tests/speed-diff.xprj"
+                          },
+             default = defaults,
+             options = {'xlogscale' : True}
+    )
 
-def makeDistanceGraph(output_dir):
-    distance = thegraph.backend.newFile(path.join(output_dir, "distance.pdf"))
-    speedAndAcc(distance, "agent.trafficjam.speed-limit.distance",
-                {
-                    "roadsegments.trafficjam.enabled": "true",
-                    "roadsegments.trafficjam.interjamdistance": 1000,
-                    "roadsegments.trafficjam.speed-limit.factor": 0.8,
-                    "roadsegments.trafficjam.jamfactor": 0.1,
+    # graph.xy(speedClust,
+    #          x = {"optimize.roadsegment.speed-clustering.factor": None},
+    #          y = {"scopes_avg(avg)": None},
+    #          parameters = {"scenario": None},
+    #          filtering = {"optimize.roadsegment.speed-clustering.enabled": 'true',
+    #                       # "scenario": "/Users/francois/Developpement/Projets/autotopo/sims/scenarios/batch-tests/speed-diff.xprj"
+    #          }
+    # )
 
-                    "optimize.agent.recenter-leader.enabled": "false",
-                    "optimize.roadsegment.speed-clustering.enabled": "false",
-                }
-                )
-    thegraph.backend.closePdf(distance)
+    #duree de vie * nombre moyen des scopes
+    graph.xycompare(speedClust,
+                    xy = {"scopes_cdf((delete-create)*avg)": None},
+                    parameters = {"optimize.roadsegment.speed-clustering.factor" : None},
+                    filtering = {"optimize.roadsegment.speed-clustering.enabled": 'true',
+                                 "scenario": "speed-diff.xprj",
+                                 "optimize.agent.recenter-leader.enabled": 'false',
+                                 },
+                    default = defaults
+    )
 
+    graph.backend.closeDocument(speedClust)
 
-def makeAnticipationGraph(output_dir):
-    anticipation = thegraph.backend.newFile(path.join(output_dir, "anticipation.pdf"))
-    connections(anticipation, "optimize.anticipation.position.seconds",
-                {
-                    "roadsegments.trafficjam.enabled": "false",
-                    "optimize.agent.recenter-leader.enabled": "false",
-                    "optimize.roadsegment.speed-clustering.enabled": "false",
-                }
-                )
-    thegraph.backend.closePdf(anticipation)
-
-
-def makeSpeedClusteringGraph(output_dir):
-    speedClustering = thegraph.backend.newFile(path.join(output_dir, "speed_clustering.pdf"))
-    connections(speedClustering, "optimize.roadsegment.speed-clustering.factor",
-                {
-                    "roadsegments.trafficjam.enabled": "false",
-                    "optimize.agent.recenter-leader.enabled": "false",
-                    "optimize.roadsegment.speed-clustering.enabled": "true",
-                    "optimize.anticipation.position.seconds": 0
-                }
-                )
-    thegraph.backend.closePdf(speedClustering)
-
-
-def makeRecenterLeaderGraph(output_dir):
-    recenterLeader = thegraph.backend.newFile(path.join(output_dir, "recenter_leader.pdf"))
-    connections(recenterLeader, "optimize.agent.recenter-leader.period",
-                {
-                    "roadsegments.trafficjam.enabled": "false",
-                    "optimize.agent.recenter-leader.enabled": "true",
-                    "optimize.roadsegment.speed-clustering.enabled": "false",
-                    # "optimize.agent.recenter-leader.period": 3,
-                    "optimize.agent.recenter-leader.bias": 2,
-                }
-                )
-
-    connections(recenterLeader, "optimize.agent.recenter-leader.bias",
-                {
-                    "roadsegments.trafficjam.enabled": "false",
-                    "optimize.agent.recenter-leader.enabled": "true",
-                    "optimize.roadsegment.speed-clustering.enabled": "false",
-                    "optimize.agent.recenter-leader.period": 3,
-                    # "optimize.agent.recenter-leader.bias": 2,
-                }
-                )
-    thegraph.backend.closePdf(recenterLeader)
-
-
-def makeGraphs(output_dir):
-    # #### Traffic jams
-    # {
-    #     "roadsegments.trafficjam.enabled" : False,
-    #     "roadsegments.trafficjam.interjamdistance" : 1000,
-    #     "roadsegments.trafficjam.jamfactor" : 0.1,
-    #     "roadsegments.trafficjam.speed-limit.factor" : 0.8,
-    #     "agent.trafficjam.speed-limit.distance" : 1000,
+    # 'roadsegments.instances.1.end'
+    # 'roadsegments.instances.1.next'
+    # 'roadsegments.instances.2.end'
+    # 'roadsegments.instances.2.next'
+    # 'roadsegments.instances.3.next'
+    # 'roadsegments.instances.start'
+    # 'statistics.roadsegments.2.log'
+    # 'scenario'
+    # 'duration'
+    # 'inflow_mean_q'
+    # 'inflow_mean_speed'
+    # u'inflow_q_1'
+    # u'inflow_q_2'
+    # u'inflow_speed_1'
+    # u'inflow_speed_2'
     #
-    #     ##### Topology optimizations
-    #     "optimize.agent.recenter-leader.enabled" : False,
-    #     "optimize.agent.recenter-leader.period" : 3,
-    #     "optimize.agent.recenter-leader.bias" : 2,
+    # 'agent.connections.distance.max'
+    # 'agent.scope.number.max'
     #
-    #     "optimize.roadsegment.speed-clustering.enabled" : False,
-    #     "optimize.roadsegment.speed-clustering.factor" : 0,
+    # 'roadsegments.trafficjam.enabled'
+    # 'optimize.agent.recenter-leader.bias'
+    # 'optimize.agent.recenter-leader.enabled'
+    # 'optimize.agent.recenter-leader.period'
+    # 'optimize.anticipation.position.seconds'
+    # 'optimize.roadsegment.speed-clustering.enabled'
+    # 'optimize.roadsegment.speed-clustering.factor'
     #
-    #     #use 0 to deactivate
-    #     "optimize.anticipation.position.seconds" : 0,
+    # 'numbers_time,number'
     #
-    #     "speed.limit.default" : 15
-    # }
-    # {
-    #     "roadsegments.trafficjam.enabled": False,
-    #     "optimize.agent.recenter-leader.enabled": False,
-    #     "optimize.roadsegment.speed-clustering.enabled": False,
+    # 'scopes_avg((delete-create))'
+    # 'scopes_avg((delete-create)*avg)'
+    # 'scopes_cdf((delete-create))'
+    # 'scopes_cdf((delete-create)*avg)'
+    # 'scopes_cdf(avg)'
+    # 'agentConn_avg(connect/time(time))'
+    # 'agentConn_cdf(connect/time(time))'
+    # 'agentConn_max(connect/time(time))'
+    # 'agentInstConn_avg(avg)'
+    # 'agentInstConn_cdf(avg)'
+    # 'roadConn_sum(connect/len(agentConn(id)))'
+    # 'roadInstConn_sum(avg)'
+    # 'timeAgentConn_avg(avg)'
+    # 'timeAgentConn_cdf(avg)'
+    # 'timeRoadConn_time,avg/numbers(number)'
     #
-    #     "roadsegments.trafficjam.interjamdistance": 1000,
-    #     "roadsegments.trafficjam.jamfactor": 0.1,
-    #     "roadsegments.trafficjam.speed-limit.factor": 0.8,
-    #
-    #     "agent.trafficjam.speed-limit.distance": 1000,
-    #
-    #     # #### Topology optimizations
-    #     "optimize.agent.recenter-leader.period": 3,
-    #     "optimize.agent.recenter-leader.bias": 2,
-    #     "optimize.roadsegment.speed-clustering.factor": 0,
-    #     #use 0 to deactivate
-    #     "optimize.anticipation.position.seconds": 0,
-    # }
-    # import multiprocessing as mp
-    # p = mp.Pool(8)
-    # p.apply_async(makeSpeedGraph, [output_dir])
-    # p.apply_async(makeSpeedClusteringGraph, [output_dir])
-    # p.apply_async(makeJamGraph, [output_dir])
-    # p.apply_async(makeDistanceGraph, [output_dir])
-    # p.apply_async(makeAnticipationGraph, [output_dir])
-    # p.apply_async(makeRecenterLeaderGraph, [output_dir])
-    # p.close()
-    # p.join()
+    # 'acc_avg(cumulatedMinus)'
+    # 'acc_avg(cumulatedPlus)'
+    # 'acc_cdf(cumulatedMinus)'
+    # 'acc_cdf(cumulatedPlus)'
+    # 'speed_avg(avg)'
+    # 'speed_cdf(avg)'
+    # 'speed_std(avg)'
+    # 'time_avg(time)'
+    # 'time_cdf(time)'
 
-    makeSpeedGraph(output_dir)
-    makeSpeedClusteringGraph(output_dir)
-    makeJamGraph(output_dir)
-    makeDistanceGraph(output_dir)
-    makeAnticipationGraph(output_dir)
-    makeRecenterLeaderGraph(output_dir)
+    all_topology(output_dir, graph, defaults)
+
+def all_topology(output_dir, graph, defaults):
+    defaultBias = 0
+    defaultPeriod = 0
+    xy = [
+        'agentConn_avg(connect/time(time))',
+        'agentInstConn_avg(avg)',
+        'roadConn_sum(connect/len(agentConn(id)))',
+        'roadInstConn_sum(avg)',
+        'scopes_avg((delete-create))',
+        'scopes_avg((delete-create)*avg)',
+        'timeAgentConn_avg(avg)',
+    ]
+
+    xyc = [
+        'agentInstConn_cdf(avg)',
+        'agentConn_cdf(connect/time(time))',
+        'scopes_cdf(avg)',
+        'scopes_cdf((delete-create))',
+        'scopes_cdf((delete-create)*avg)',
+        'timeAgentConn_cdf(avg)',
+        # 'timeRoadConn_time,avg/numbers(number)'
+    ]
+
+    print graph.storage.get_data().columns.values
+
+    test = graph.backend.newDocument(path.join(output_dir, "test_recenter_period"))
+
+    for y in xy:
+        try:
+            graph.xy(test,
+                     x = {"optimize.agent.recenter-leader.period": None},
+                     y = {y: None},
+                     parameters = {"scenario": None},
+                     filtering = {"optimize.agent.recenter-leader.enabled": 'true',
+                                  "optimize.roadsegment.speed-clustering.enabled": 'false',
+                                  "optimize.agent.recenter-leader.bias" : defaultBias
+                     },
+                     default = defaults
+            )
+        except Exception as e:
+            print e
+    for y in xyc:
+        try:
+            graph.xycompare(test,
+                            xy = {y: None},
+                            parameters = {"optimize.agent.recenter-leader.period": None},
+                            filtering = {"optimize.agent.recenter-leader.enabled": 'true',
+                                         "optimize.roadsegment.speed-clustering.enabled": 'false',
+                                         "scenario": "large-10.xprj",
+                                         "optimize.agent.recenter-leader.bias": defaultBias
+                            },
+                            default = defaults,
+                            # options= {'xlogscale' : True}
+            )
+        except Exception as e:
+            print e
+    graph.backend.closeDocument(test)
+
+    test = graph.backend.newDocument(path.join(output_dir, "test_recenter_bias"))
+    for y in xy:
+        try:
+            graph.xy(test,
+                     x = {"optimize.agent.recenter-leader.bias": None},
+                     y = {y: None},
+                     parameters = {"scenario": None},
+                     filtering = {"optimize.agent.recenter-leader.enabled": 'true',
+                                  "optimize.roadsegment.speed-clustering.enabled": 'false',
+                                  "optimize.agent.recenter-leader.period": defaultPeriod
+                     },
+                     default = defaults
+            )
+        except Exception as e:
+            print e
+    for y in xyc:
+        try:
+            graph.xycompare(test,
+                            xy = {y: None},
+                            parameters = {"optimize.agent.recenter-leader.bias": None},
+                            filtering = {"optimize.agent.recenter-leader.enabled": 'true',
+                                         "optimize.roadsegment.speed-clustering.enabled": 'false',
+                                         "scenario": "large-10.xprj",
+                                         "optimize.agent.recenter-leader.period": defaultPeriod
+                            },
+                            default = defaults,
+                            # options = {'xlogscale': True}
+            )
+        except Exception as e:
+            print e
+    graph.backend.closeDocument(test)
+
+    test = graph.backend.newDocument(path.join(output_dir, "test_speed_clust"))
+    for y in xy:
+        try:
+            graph.xy(test,
+                     x = {"optimize.roadsegment.speed-clustering.factor": None},
+                     y = {y: None},
+                     parameters = {"scenario": None},
+                     filtering = {"optimize.agent.recenter-leader.enabled": 'false',
+                                  "optimize.roadsegment.speed-clustering.enabled": 'true',
+                     },
+                     default = defaults
+            )
+        except Exception as e:
+            print e
+    for y in xyc:
+        try:
+            graph.xycompare(test,
+                            xy = {y: None},
+                            parameters = {"optimize.roadsegment.speed-clustering.factor": None},
+                            filtering = {"optimize.agent.recenter-leader.enabled": 'false',
+                                         "optimize.roadsegment.speed-clustering.enabled": 'true',
+                                         "scenario": "speed-diff.xprj",
+                            },
+                            default = defaults
+            )
+        except Exception as e:
+            print e
+    graph.backend.closeDocument(test)
+
+
 
 if __name__ == "__main__":
 
-    # ACTION_READ = "read"
     ACTION_WRITE = "write"
     ACTION_GRAPH = "graph"
     import argparse
+    import os
+    AVAIL_STORAGE = {
+        "csv" : PandasCsv,
+        "pickle" : PandasPickle,
+        "json" : PandasJson,
+        "hdf" : PandasHDF,
+        "zip" : Zip
+    }
+
+    def add_common_arguments(par):
+        par.add_argument("--database", default="sims")
+        par.add_argument("--storage-type", choices=AVAIL_STORAGE, default="zip")
 
     parser = argparse.ArgumentParser()
 
@@ -484,9 +604,9 @@ if __name__ == "__main__":
     write.set_defaults(action=ACTION_WRITE)
     write.add_argument("--output-dir", default = "output")
     write.add_argument("--parameters", default = "autotopo-config.properties")
-    write.add_argument("--scenario", default = "scenario.xprj")
 
-    write.add_argument("--database", default="sims.db")
+    write.add_argument("--scenario", default = "scenario.xprj")
+    add_common_arguments(write)
 
     # read = mode.add_parser("read")  #, parents=[parser])
     # read.set_defaults(action=ACTION_READ)
@@ -496,33 +616,53 @@ if __name__ == "__main__":
     graph = mode.add_parser("graph")  #, parents=[parser])
     graph.set_defaults(action=ACTION_GRAPH)
     graph.add_argument("--output-dir", default = "graphs")
-    graph.add_argument("--database", default="sims.db")
+    add_common_arguments(graph)
 
     opts = parser.parse_args()
-    p = PandasCsv(opts.database)
-    # with Sqlite3(opts.database) as storage:
+    p = AVAIL_STORAGE[opts.storage_type](opts.database)
+
     with p as storage:
-        # if opts.action == ACTION_READ:
-        #     SqliteShell(opts.database, storage).cmdloop()
         if opts.action == ACTION_WRITE:
-            with FileLock(path.join(path.dirname(path.realpath(__file__)), ".db_lock")) as lock:
-                print "Recording results into database"
+            print "Recording results into database"
+            if isinstance(p, ProcessedStorage):
                 storage.prepare()
 
                 params = getParameters(opts.parameters)
                 data = readResults(opts.output_dir)
                 scenario = getScenario(opts.scenario)
+                print "Crunching results"
                 res = crunchResults(params, scenario, data)
 
                 storage.write_row(res)
-                print "Results recorded"
+                storage.flush()
+            elif isinstance(p, RawStorage):
+                storage.prepare()
+                print "Storing data"
+                config = {
+                    "scenario" : opts.scenario,
+                    "parameters" : opts.parameters
+                }
+                storage.store(opts.output_dir, config, os.path.realpath(os.path.join(opts.output_dir, "..")))
+                storage.flush()
+            print "Results recorded"
         elif opts.action == ACTION_GRAPH:
             if not path.exists(opts.output_dir):
                 from os import mkdir
 
                 mkdir(opts.output_dir)
+            if isinstance(p, RawStorage):
+                print "Extracting results"
+                for output_dir, conf in storage.get_results():
+                    params = getParameters(conf['parameters'])
+                    data = readResults(output_dir)
+                    scenario = getScenario(conf['scenario'], output_dir)
+                    print "Crunching results"
+                    res = crunchResults(params, scenario, data)
+                    storage.write_row(res)
+
             thegraph = Graph(storage)
-            makeGraphs(opts.output_dir)
+            makeGraphs(opts.output_dir, thegraph)
+
 
 
 ## ## ## ## ## ## ## ##
@@ -531,7 +671,6 @@ if __name__ == "__main__":
 # taux de connexion road = nombre de connexion/nombre de voitures ???
 # variables "adimentionnees"
 
-# bursts avec taux d'injection voiture 0/1 + tester fonctionnement normal
 # leader bias avec 0.1/0.5
 # regarder taux de connection/nombre de connexions instantanees
 
@@ -539,14 +678,13 @@ if __name__ == "__main__":
 # phase 1 => visualisation simplifiee (et comparaison ?)
 # phase 2 => test grand nombres + variables interessante
 
-# reprendre les scenarios + speed-diff faire 2x2 voies
 # croiser les scenarios et les techniques
-
 
 # objectifs => scenario classique ? (qu'est-ce que classique ???)
 
 
 # motivations : routage + bouchon (si temps)
 
-
 # ### look at rejection rates for merging.
+
+#trous plus grand entre vagues
