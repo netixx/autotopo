@@ -16,10 +16,6 @@ public class Clustering {
 	private static final int MAX_SCOPE_NUMBER = Settings.getInt(Settings.MAX_SCOPE_NUMBER);
 	private static final int MAX_SCOPE_NUMBER_THRESHOLD = MAX_SCOPE_NUMBER + Settings.getInt(Settings.MAX_SCOPE_NUMBER_THRESHOLD);
 	private static final boolean SPEED_CLUSTERING_ENABLED = Settings.getBoolean(Settings.OPTIMIZE_ROADSEGMENT_SPEED_CLUSTERING_ENABLED);
-	private static final double SPEED_CLUSTERING_FACTOR = Settings.getDouble(Settings.OPTIMIZE_ROADSEGMENT_SPEED_CLUSTERING_FACTOR);
-	private static final double AGENTS_MAX_DISTANCE = Settings.getDouble(Settings.MAX_VEHICLE_CONNECTIONS_DISTANCE);
-	private static final double SPEED_CLUSTERING_THRESHOLD = AGENTS_MAX_DISTANCE * SPEED_CLUSTERING_FACTOR;
-
 
 	private Comparator<Merge> mergeComparator = createMergeComparator();
 
@@ -114,8 +110,7 @@ public class Clustering {
 			if (SPEED_CLUSTERING_ENABLED) {
 				double meanSpeed1 = AggregationHelper.getMean(leaders).getSpeed();
 				double meanSpeed2 = AggregationHelper.getMean(merge.leaders).getSpeed();
-//				return (Math.abs(meanSpeed1 - meanSpeed2) <= SPEED_CLUSTERING_FACTOR * (meanSpeed1 + meanSpeed2) / 2);
-				return (Math.abs(meanSpeed1 - meanSpeed2) <= SPEED_CLUSTERING_THRESHOLD);
+				Conditions.speed(meanSpeed1, meanSpeed2);
 			}
 
 			return true;

@@ -9,6 +9,7 @@ import java.util.Set;
 import java.util.SortedMap;
 import java.util.TreeMap;
 
+import fr.netixx.AutoTopo.agents.clustering.Conditions;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -607,7 +608,7 @@ public class Agent extends AbstractElement<Agent> implements IElement, IExitPoin
 			return true;
 		final double hs = host.getAggregate().getSpeed();
 		final double cs = candidate.getAggregate().getSpeed();
-		return Math.abs(hs - cs) < SPEED_CLUSTERING_FACTOR * (hs + cs) / 2;
+		return Conditions.speed(hs, cs);
 	}
 
 	private boolean isAvailable(Agent host, Agent candidate) {
