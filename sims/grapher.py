@@ -185,7 +185,7 @@ cd "$$dir"
             # )
 
     class YLine(object):
-        plotTpl=Template('''set arrow 1 from first 0,${y} rto graph 1,0 nohead linetype -1 ${style} linecolor rgb "${color}" linewidth ${width}''')
+        plotTpl=Template('''set arrow from first 0,${y} rto graph 1,0 nohead linetype -1 ${style} linecolor rgb "${color}" linewidth ${width}''')
 
         def __init__(self, y, color = 0, style = None, width = 1):
             self.y = y
