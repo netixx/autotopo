@@ -42,7 +42,7 @@ defaultRecenterBias="0"
 #testedRecenterBias="0 1 3 5"
 #testedRecenterPeriod="0 1 3 5 10 20"
 #testedRecenterPeriod="0 5"
-testedRecenterPeriod="5 1 0"
+testedRecenterPeriod="10 1 0"
 ya=220
 y=20
 
