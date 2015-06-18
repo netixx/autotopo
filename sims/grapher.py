@@ -5,7 +5,8 @@ import numpy as np
 import collections
 import textwrap
 import traceback
-
+from processing import PostFunction
+import pandas as pd
 
 import subprocess
 
@@ -652,12 +653,27 @@ class PandasGraph(object):
 
         return where
 
+    def _applyFuncs(self, y, data):
+        ey = {}
+        for ky, vy in y.iteritems():
+            if isinstance(ky, PostFunction):
+                newkey = ky.name()
+                # create new column
+                if not newkey in data.columns:
+                    data[newkey] = pd.Series(ky.compute(data), index=data.index)
+                ey[newkey] = vy
+            else:
+                ey[ky] = vy
+        return ey
 
     def xy(self, document = None, x = None, y = None, parameters = None, filtering = None, default = None, options = None):
         data = self.storage.get_data()
+
+        ey = self._applyFuncs(y, data)
+
         # print data.columns.values
-        d = self.makeWhere(data, filters = dict(x.items() + y.items() + filtering.items()), params = parameters)
-        agg = d.groupby(parameters.keys())[x.keys()+y.keys()+parameters.keys()]
+        d = self.makeWhere(data, filters = dict(x.items() + ey.items() + filtering.items()), params = parameters)
+        agg = d.groupby(parameters.keys())[x.keys()+ey.keys()+parameters.keys()]
 
         # agg = d.groupby(parameters.keys()+x.keys())
 
@@ -665,38 +681,38 @@ class PandasGraph(object):
         if default is not None:
             fil = dict(filtering.items())
             fil.update(default)
-            defvalues = self.makeWhere(data, filters=fil, params = parameters)[x.keys()+y.keys()+parameters.keys()]
+            defvalues = self.makeWhere(data, filters=fil, params = parameters)[x.keys()+ey.keys()+parameters.keys()]
             defagg = defvalues.groupby(parameters.keys())
 
         for ax in x.keys():
-            fig = self.backend.newFigure()
+            fig = self.backend.newFigure(options)
             try:
                 for key, grp in agg:
-                    agg2 = grp.groupby([ax])[[ax]+y.keys()]
+                    agg2 = grp.groupby([ax])[[ax]+ey.keys()]
                     avgs = agg2.mean()
                     stds = agg2.std()
                     # print "avgsx", avgs[ax].values
                     # print "avgs", avgs[y.keys()].values
                     # print "stds", stds[y.keys()].values
-                    for ky in y.iterkeys():
+                    for ky in ey.iterkeys():
                         self.backend.drawXY(fig, avgs[ax].values, avgs[ky].values, yerr = stds[ky].values, color = str(key)+ky, legend = ky+self.leg(parameters.keys(), key))
 
                 if defagg is not None:
                     for dkey, dgrp in defagg:
-                        avg = dgrp[y.keys()].mean()
-                        std = dgrp[y.keys()].std()
-                        for ky in y.iterkeys():
-                            self.backend.drawYLine(fig, y=avg[ky], color = str(dkey)+ky, style= "--", width = 0.8)
-                            self.backend.drawYLine(fig, y=(avg[ky]+std[ky]), color = str(dkey)+ky, style=":", width = 0.5)
-                            self.backend.drawYLine(fig, y=(avg[ky]-std[ky]), color = str(dkey)+ky, style=":", width = 0.5)
+                        avg = dgrp[ey.keys()].mean()
+                        std = dgrp[ey.keys()].std()
+                        for ky in ey.iterkeys():
+                            self.backend.drawYLine(fig, y=avg[ky], color = str(dkey)+str(ky), style= "--", width = 0.8)
+                            self.backend.drawYLine(fig, y=(avg[ky]+std[ky]), color = str(dkey)+str(ky), style=":", width = 0.5)
+                            self.backend.drawYLine(fig, y=(avg[ky]-std[ky]), color = str(dkey)+str(ky), style=":", width = 0.5)
 
 
                 self.backend.decorate(fig,
                                       g_xlabel = ax,
-                                      g_ylabel = y.keys(),
+                                      g_ylabel = ey.keys(),
                                       g_ygrid = True,
                                       g_title = self.backend.printTitle("Sensitivity analysis of {variables} wrt %s {filtering}" % ax,
-                                                                        self.backend.printVariables(y),
+                                                                        self.backend.printVariables(ey),
                                                                         self.backend.printParams(filtering))
                 )
                 self.backend.saveFigure(document, fig)
@@ -726,7 +742,7 @@ class PandasGraph(object):
 
         # colDict = {}
         for axy in xy:
-            fig = self.backend.newFigure()
+            fig = self.backend.newFigure(options)
             try:
                 for key, grp in agg:
                     vals = grp[axy].values

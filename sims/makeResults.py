@@ -10,7 +10,7 @@ from string import Template
 
 from grapher import PandasGraph as Graph
 from storage import FileLock, Sqlite3, PandasCsv, PandasPickle, PandasJson, PandasHDF, RawStorage, ProcessedStorage, Zip
-from processing import FILE, TREATMENT, COLS, Function, Fetch
+from processing import FILE, TREATMENT, COLS, Function, Fetch, PostFunction
 from collections import OrderedDict
 
 DATA_DESCRIPTION = OrderedDict([
@@ -94,6 +94,15 @@ DATA_DESCRIPTION = OrderedDict([
         FILE: "timeScope.csv"
     })
 ])
+
+import pandas as pd
+class PandasCsvReader(object):
+    def __init__(self, file, cols=None):
+        self.data = pd.read_csv(file, sep=";", quotechar='"', dtype=np.float)
+
+
+    def getColumn(self, col):
+        return self.data[col]
 
 
 class CsvReader():
@@ -366,6 +375,18 @@ def makeGraphs(output_dir, graph):
     graph.backend.closeDocument(recenterLeaderPeriod)
 
     speedClust = graph.backend.newDocument(path.join(output_dir, "speed_clustering"))
+    graph.xy(speedClust,
+             x = {"optimize.roadsegment.speed-clustering.factor": None},
+             y = {PostFunction("divide", kwparams={"den" : 'roadConn_sum(connect/len(agentConn(id)))', "num" : 'roadInstConn_sum(avg)'}): None},
+             parameters = {"scenario": None},
+             filtering = {"optimize.roadsegment.speed-clustering.enabled": 'true',
+                          "optimize.agent.recenter-leader.enabled": 'false',
+                          # "scenario": "/Users/francois/Developpement/Projets/autotopo/sims/scenarios/batch-tests/speed-diff.xprj"
+             },
+             default = defaults,
+             options = {'xlogscale': True}
+    )
+
     #duree de vie des scopes
     graph.xy(speedClust,
              x = {"optimize.roadsegment.speed-clustering.factor": None},
@@ -456,7 +477,7 @@ def makeGraphs(output_dir, graph):
     # 'time_avg(time)'
     # 'time_cdf(time)'
 
-    all_topology(output_dir, graph, defaults)
+    # all_topology(output_dir, graph, defaults)
 
 def all_topology(output_dir, graph, defaults):
     defaultBias = 0

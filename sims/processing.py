@@ -83,6 +83,60 @@ class FuncHelper(object):
     """Properties for making graphs and interface to graph object"""
     __metaclass__ = _FuncHelper
 
+class PostFunction(object):
+
+    def __init__(self, funcs = None, posparams = None, kwparams = None):
+        self.posparams = posparams if posparams is None or type(posparams) in (tuple, list) else (posparams,)
+        self.kwparams = kwparams
+
+        if type(funcs) in (tuple, list):
+            self.funcs = [Function(func, posparams = self.posparams, kwparams= self.kwparams) for func in funcs]
+            self.func = None
+        else:
+            self.func = funcs
+            self.funcs = None
+
+    def compute(self, data):
+        args = []
+        kwargs = {}
+        if self.posparams is not None:
+            for pparam in self.posparams:
+                #param is a function
+                if isinstance(pparam, PostFunction):
+                    #invoke function recursively
+                    args.append(pparam.compute(data))
+                else:
+                    # print defname
+                    #get column
+                    args.append(data[pparam])
+        if self.kwparams is not None:
+            for k, v in self.kwparams.iteritems():
+                if isinstance(v, PostFunction):
+                    kwargs[k] = v.compute(data)
+                else:
+                    #get column data
+                    kwargs[k] = data[v]
+        if self.funcs is not None:
+            return [getattr(FuncHelper, func.func)(*args, **kwargs) for func in self.funcs]
+        if self.func is not None:
+            return getattr(FuncHelper, self.func)(*args, **kwargs)
+        else:
+            return args
+
+    def name(self):
+        if self.funcs is not None:
+            return [repr(func) for func in self.funcs]
+        else:
+            return repr(self)
+
+    def __repr__(self):
+        args = [str(p) for p in self.posparams] if self.posparams is not None else []
+        kwargs = {k: str(v) for k, v in self.kwparams.iteritems()} if self.kwparams is not None else {}
+        return FuncHelper.getPrintableName(self.func, *args, **kwargs)
+
+
+
+
 class Function(object):
 
     def __init__(self, funcs = None, posparams = None, kwparams = None):
