@@ -477,7 +477,7 @@ def makeGraphs(output_dir, graph):
     # 'time_avg(time)'
     # 'time_cdf(time)'
 
-    # all_topology(output_dir, graph, defaults)
+    all_topology(output_dir, graph, defaults)
 
 def all_topology(output_dir, graph, defaults):
     defaultBias = 0

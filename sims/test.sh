@@ -9,6 +9,8 @@ CONFIG_TPL="autotopo-config.properties.tpl"
 
 RUN="$DIR/run.sh"
 
+SCENARIOS_DIR="$DIR/scenarios/batch-tests"
+
 if [[ -z $1 ]]
 then
 OUTPUT_DIR="$DIR/output"
@@ -36,10 +38,10 @@ sed \
 "$CONFIG_TPL" > "$1"
 }
 
-jobs="3"
+jobs="2"
 
 database="$DIR/sims.db"
-scenario="$DIR/scenarios/laneclosure-no-speed-limits-long/laneclosure.xprj"
+scenarios="$SCENARIOS_DIR/large-10.xprj $SCENARIOS_DIR/speed-diff.xprj"
 
 defaultTJEnabled="false"
 defaultTJJamFactor="0.1"
@@ -79,20 +81,23 @@ n=0
 
 echo -n "" > "$REPS_FILE"
 
-mkdir "$OUTPUT_DIR"
+# create dir or clean existing dir
+mkdir "$OUTPUT_DIR" || rm -rf "$OUTPUT_DIR"/*
 
 queueSim() {
     root_dir="$OUTPUT_DIR/$n"
     mkdir "$root_dir"
     conf="$root_dir/$CONFIG_FILE"
     makeConfig "$conf" "$@"
-
     echo "$root_dir $root_dir $conf $scenario $RUN_SIM $RECORD_RESULT $database" >> "$REPS_FILE"
     n=$((n+1))
 }
 
 
 echo "Queueing sims"
+for scenario in ${scenarios}
+do
+
 ### prepare sim files
 for rep in ${repeat}
 do
@@ -135,7 +140,7 @@ do
 done
 
 done
-
+done
 
 #### run the sims
 
@@ -144,14 +149,12 @@ export TIMEFORMAT="$n simulations done in : %lU"
 echo "Running $n sims with $jobs jobs.... "
 
 time {
-parallel --colsep ' ' -j "$jobs" -a "$REPS_FILE" "$RUN" {} {} {} {} {} {}
+parallel --bar --colsep ' ' -j "$jobs" -a "$REPS_FILE" "$RUN" {} {} {} {} {} {}
 }
 
 
 ### clean
 echo -n "Cleaning... "
 rm "$REPS_FILE"
-rm -rf "$OUTPUT_DIR"/*
-
 
 echo "Done"
