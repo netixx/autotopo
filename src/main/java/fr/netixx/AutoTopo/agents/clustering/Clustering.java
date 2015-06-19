@@ -110,7 +110,7 @@ public class Clustering {
 			if (SPEED_CLUSTERING_ENABLED) {
 				double meanSpeed1 = AggregationHelper.getMean(leaders).getSpeed();
 				double meanSpeed2 = AggregationHelper.getMean(merge.leaders).getSpeed();
-				Conditions.speed(meanSpeed1, meanSpeed2);
+				return Conditions.speed(meanSpeed1, meanSpeed2);
 			}
 
 			return true;
