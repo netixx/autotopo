@@ -87,8 +87,8 @@ public class TimeScope extends AbstractStatistic {
         ConnectionsRecorder(int nConnections, double time) {
             this.createTime = time;
             currentTime = time;
-            curConn = 0;
-            n = 1;
+            curConn = nConnections;
+            n = nConnections;
             max = nConnections;
             min = nConnections;
             recordConnectionNumber(nConnections, time);
