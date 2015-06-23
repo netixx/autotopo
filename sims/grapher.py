@@ -558,24 +558,36 @@ class CsvBackend(Backend):
                 wri.writerows(figure.iterate_data(key))
                 wri.writer.writerow([])
 
+
+
+GRAPH_BACKENDS = {
+    "matplotlib"  : _PyplotGraph,
+    "gnuplot" :  _GnuplotGraph
+}
+
 class GraphBackend(Backend):
     """Properties for making graphs and interface to graph object"""
 
     LEGEND_WRAP_WIDTH = 30
     TITLE_WRAP_WIDTH = 60
 
-    # __metaclass__ = _PyplotGraph
-    __metaclass__ = _GnuplotGraph
+    __metaclass__ = _PyplotGraph
+    # __metaclass__ = _GnuplotGraph
+
+    @classmethod
+    def setGrapher(cls, grapher):
+        cls.__metaclass__ = GRAPH_BACKENDS[grapher]
+
 
     import random as rand
 
     colors = ['blue', 'green', 'cyan', 'magenta', 'yellow', 'black', 'red',
-              'blueviolet', 'brown', 'cadetblue', 'chartreuse', 'chocolate', 'coral', 'cornflowerblue', 'crimson',
+              'blueviolet', 'brown', 'chartreuse', 'chocolate', 'coral', 'cornflowerblue', 'crimson',
               'darkblue', 'darkcyan', 'darkgrey', 'darkgreen', 'darkslateblue', 'darkgoldenrod', 'darkturquoise',
               'deeppink', 'dodgerblue', 'firebrick', 'forestgreen', 'fuchsia', 'green', 'greenyellow', 'hotpink',
               'indianred', 'indigo', 'lightseagreen', 'lightsalmon', 'limegreen', 'maroon', 'mediumaquamarine', 'mediumblue',
               'mediumvioletred', 'mediumslateblue', 'navy', 'olive', 'olivedrab', 'orange', 'orangered', 'orchid', 'purple', 'royalblue',
-              'seagreen', 'slateblue', 'sienna', 'steelblue', 'teal', 'tomato','aqua' ]
+              'seagreen', 'slateblue', 'sienna', 'steelblue', 'teal', 'tomato','aqua', 'cadetblue']
     # rand.shuffle(colors)
     markers = ['^', 'd', 'o', 'v', '>', '<', 'p', 's', '*']
 
@@ -631,8 +643,10 @@ class PandasGraph(object):
     backend = GraphBackend
     # backend = CsvBackend
 
-    def __init__(self, storage):
+    def __init__(self, storage, backend = None):
         self.storage = storage
+        if backend is not None:
+            self.backend = backend
 
     def makeWhere(self, data, filters = None, params = None):
         where = data
@@ -753,7 +767,7 @@ class PandasGraph(object):
                     for dkey, dgrp in defagg:
                         vals = dgrp[axy].values
                         for val in vals:
-                            self.backend.drawXY(fig, val[0], val[1], color = dkey, style = '-.', legend = "default "+self.leg(parameters.keys(), dkey))
+                            self.backend.drawXY(fig, val[0], val[1], color = "def"+str(dkey), style = '-.', legend = "default "+self.leg(parameters.keys(), dkey))
                 self.backend.decorate(fig,
                                       g_xlabel = "",
                                       g_ylabel = "",

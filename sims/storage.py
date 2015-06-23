@@ -5,7 +5,8 @@ import numpy as np
 import pandas as pd
 import os
 
-lockfile = os.path.join(os.path.dirname(os.path.realpath(__file__)), ".db_lock")
+def getLockFile(db):
+    return os.path.join(os.path.dirname(os.path.realpath(__file__)), ".%s.db_lock"%db)
 
 class Storage(object):
     def get_data(self):
@@ -54,17 +55,23 @@ class Zip(RawStorage):
 
     CONFIG = "conf.json"
 
-    def __init__(self, database):
+
+    def __init__(self, database, mode='w'):
         self.database = database + ".zip"
         self.zip = None
         self.data = None
         self.rowlist = []
+        self.lock = FileLock(getLockFile(self.database))
+        self.mode = mode
 
     def __enter__(self):
+        if self.mode == 'w':
+            self.lock.lock()
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        pass
+        if self.mode == 'w':
+            self.lock.unlock()
 
     def prepare(self):
         self.zip = zipfile.ZipFile(self.database, 'a', zipfile.ZIP_DEFLATED)
@@ -109,8 +116,7 @@ class Zip(RawStorage):
 
 
     def flush(self):
-        with FileLock(lockfile) as lock:
-            self.zip.close()
+        self.zip.close()
 
 
 class PandasHDF(ProcessedStorage):
@@ -140,7 +146,7 @@ class PandasHDF(ProcessedStorage):
         return self.data
 
     def flush(self):
-        with FileLock(lockfile) as lock:
+        with FileLock(FileLock(getLockFile(self.database))) as lock:
             newdata = pd.DataFrame(self.rowlist)
             newdata.to_hdf(self.database, "dt", format = 't', append = True)
 
@@ -172,7 +178,7 @@ class PandasJson(ProcessedStorage):
         return self.convert
 
     def flush(self):
-        with FileLock(lockfile) as lock:
+        with FileLock(FileLock(getLockFile(self.database))) as lock:
             newdata = pd.DataFrame(self.rowlist)
             d = pd.concat([self.data, newdata])
             d.to_json(self.database, orient = 'split')
@@ -204,7 +210,7 @@ class PandasPickle(ProcessedStorage):
         return self.convert
 
     def flush(self):
-        with FileLock(lockfile) as lock:
+        with FileLock(FileLock(getLockFile(self.database))) as lock:
             newdata = pd.DataFrame(self.rowlist)
             d = pd.concat([self.data, newdata])
             d.to_pickle(self.database)
@@ -237,7 +243,7 @@ class PandasCsv(ProcessedStorage):
         self.create = not os.path.exists(self.database)
 
     def flush(self):
-        with FileLock(lockfile) as lock:
+        with FileLock(FileLock(getLockFile(self.database))) as lock:
             if not self.create:
                 newdata = pd.DataFrame(self.rowlist)
             else:
@@ -449,15 +455,22 @@ class FileLock(object):
     def __init__(self, file):
         self.file = file
 
-    def __enter__(self):
+
+    def lock(self):
         self.fp = open(self.file, 'w')
         # try:
         fcntl.lockf(self.fp, fcntl.LOCK_EX)
+
+    def unlock(self):
+        fcntl.lockf(self.fp, fcntl.LOCK_UN)
+        self.fp.close()
+
+    def __enter__(self):
+        self.lock()
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        fcntl.lockf(self.fp, fcntl.LOCK_UN)
-        self.fp.close()
+        self.unlock()
 
 
 # import cmd
