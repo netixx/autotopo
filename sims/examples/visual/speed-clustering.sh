@@ -36,7 +36,10 @@ runOne() {
     eval ${RUN} -f "$SCENARIO" "$1" "$2" -o "$OUTPUT" > /dev/null &
 }
 
+
+rm "$DIR/"*.properties
 testedSpeedFact="0.1 0.01 0.001 0"
+
 
 ya=200
 y=20

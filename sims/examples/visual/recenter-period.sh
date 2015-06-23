@@ -36,6 +36,9 @@ runOne() {
     eval ${RUN} -f "$SCENARIO" "$1" "$2" -o "$OUTPUT" > /dev/null &
 }
 
+
+rm "$DIR/"*.properties
+
 defaultRecenterBias="0"
 #defaultRecenterPeriod="0"
 
