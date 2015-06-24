@@ -1,4 +1,5 @@
-#!/usr/bin/python2.7
+#!/usr/bin/env python
+
 import sys
 import os.path as path
 
@@ -8,7 +9,7 @@ import csv
 import numpy as np
 from string import Template
 
-from grapher import PandasGraph as Graph
+from grapher import PandasGraph as Graph, CsvBackend, GraphBackend, GRAPH_BACKENDS
 from storage import FileLock, Sqlite3, PandasCsv, PandasPickle, PandasJson, PandasHDF, RawStorage, ProcessedStorage, Zip
 from processing import FILE, TREATMENT, COLS, Function, Fetch, PostFunction
 from collections import OrderedDict
@@ -22,8 +23,10 @@ DATA_DESCRIPTION = OrderedDict([
     }),
     ("acc", {
         TREATMENT: [
-            Function(("avg", "cdf"), posparams="cumulatedPlus"),
-            Function(("avg", "cdf"), posparams="cumulatedMinus"),
+            Function(("avg", "cdf"), posparams=Function("divide", kwparams={"num" : "cumulatedPlus", "den" : Fetch("time", "time"),
+                                                                    "nummap" : "id", "denmap" : Fetch("time", "id")})),
+            Function(("avg", "cdf"), posparams = Function("divide", kwparams = {"num": "cumulatedMinus" , "den": Fetch("time", "time"),
+                                                                    "nummap": "id", "denmap": Fetch("time", "id")})),
         ],
         FILE: "acceleration.csv",
     }),
@@ -34,7 +37,8 @@ DATA_DESCRIPTION = OrderedDict([
         FILE: "time.csv"
     }),
     ("numbers", {
-        TREATMENT: [Function("xy", posparams=("time", "number"))],
+        TREATMENT: [Function("xy", posparams=("time", "number")),
+                    Function("avg", posparams="number")],
         FILE:"numbers.csv"
     }),
     ("timeRoadConn", {
@@ -69,7 +73,7 @@ DATA_DESCRIPTION = OrderedDict([
     }),
     ("roadInstConn", {
         TREATMENT: [
-            Function("sum", posparams = "avg")
+            Function("sum", posparams =  "avg")
         ],
         FILE: "roadSegmentInstantConnections.csv"
     }),
@@ -89,7 +93,7 @@ DATA_DESCRIPTION = OrderedDict([
             )
             )
             ),
-            Function("cdf", posparams="avg")
+            Function(("cdf", "avg"), posparams="avg")
         ],
         FILE: "timeScope.csv"
     })
@@ -251,176 +255,176 @@ def makeGraphs(output_dir, graph):
     defaultPeriod = 0
     defaultSpeedClust = 0
     defaults = {
-        "optimize.agent.recenter-leader.enabled": 'false',
+        "optimize.agent.recenter-leader.enabled": 'true',
         "optimize.roadsegment.speed-clustering.enabled": 'false',
         "roadsegments.trafficjam.enabled": 'false',
         "optimize.anticipation.position.seconds" : 0
     }
-    recenterLeaderBias = graph.backend.newDocument(path.join(output_dir, "recenter_leader_bias"))
-    graph.xy(recenterLeaderBias,
-             x = {"optimize.agent.recenter-leader.bias": None},
-             y = {"scopes_avg((delete-create))" : None},
-             parameters = {"scenario" : None},
-             filtering= {"optimize.agent.recenter-leader.enabled" : 'true',
-                         "optimize.roadsegment.speed-clustering.enabled": 'false',
-                         "optimize.agent.recenter-leader.period" : defaultPeriod
-             },
-             default = defaults
-    )
-
-    graph.xy(recenterLeaderBias,
-             x = {"optimize.agent.recenter-leader.bias": None},
-             y = {"scopes_avg((delete-create)*avg)": None},
-             parameters = {"scenario": None},
-             filtering = {"optimize.agent.recenter-leader.enabled": 'true',
-                          "optimize.roadsegment.speed-clustering.enabled": 'false',
-                          "optimize.agent.recenter-leader.period": defaultPeriod
-             },
-             default = defaults
-    )
-
-    graph.xy(recenterLeaderBias,
-             x = {"optimize.agent.recenter-leader.bias": None},
-             y = {"roadConn_sum(connect/len(agentConn(id)))": None},
-             parameters = {"scenario": None},
-             filtering = {"optimize.agent.recenter-leader.enabled": 'true',
-                          "optimize.roadsegment.speed-clustering.enabled": 'false',
-                          "optimize.agent.recenter-leader.period": defaultPeriod
-             },
-             default = defaults
-    )
-
-    graph.xycompare(recenterLeaderBias,
-               xy = {"scopes_cdf((delete-create)*avg)" : None},
-               parameters = {"optimize.agent.recenter-leader.bias": None},
-               filtering = {"optimize.agent.recenter-leader.enabled": 'true',
-                            "optimize.roadsegment.speed-clustering.enabled": 'false',
-                            "scenario" : "large-10.xprj",
-                            "optimize.agent.recenter-leader.period": defaultPeriod
-               },
-               default = defaults
-    )
-
-    graph.xycompare(recenterLeaderBias,
-                    xy = {"scopes_cdf((delete-create)*avg)": None},
-                    parameters = {"scenario" : None},
-                    filtering = {"optimize.agent.recenter-leader.enabled": 'true',
-                                 "optimize.agent.recenter-leader.bias": defaultBias,
-                                 "optimize.roadsegment.speed-clustering.enabled": 'false'
-                    },
-                    default = defaults
-    )
-
-    graph.backend.closeDocument(recenterLeaderBias)
-
-    recenterLeaderPeriod = graph.backend.newDocument(path.join(output_dir, "recenter_leader_period"))
-
-    graph.xy(recenterLeaderPeriod,
-             x = {"optimize.agent.recenter-leader.period": None},
-             y = {"scopes_avg((delete-create))": None},
-             parameters = {"scenario": None},
-             filtering = {"optimize.agent.recenter-leader.enabled": 'true',
-                          "optimize.roadsegment.speed-clustering.enabled": 'false',
-                          "optimize.agent.recenter-leader.bias" : defaultBias
-             },
-             default = defaults
-    )
-
-    graph.xy(recenterLeaderPeriod,
-             x = {"optimize.agent.recenter-leader.period": None},
-             y = {"scopes_avg((delete-create)*avg)": None},
-             parameters = {"scenario": None},
-             filtering = {"optimize.agent.recenter-leader.enabled": 'true',
-                          "optimize.roadsegment.speed-clustering.enabled": 'false',
-                          "optimize.agent.recenter-leader.bias": defaultBias
-             },
-             default = defaults
-    )
-
-    graph.xy(recenterLeaderPeriod,
-             x = {"optimize.agent.recenter-leader.period": None},
-             y = {"roadConn_sum(connect/len(agentConn(id)))": None},
-             parameters = {"scenario": None},
-             filtering = {"optimize.agent.recenter-leader.enabled": 'true',
-                          "optimize.roadsegment.speed-clustering.enabled": 'false',
-                          "optimize.agent.recenter-leader.bias": defaultBias
-             },
-             default = defaults
-    )
-
-    graph.xycompare(recenterLeaderPeriod,
-                    xy = {"scopes_cdf((delete-create)*avg)": None},
-                    parameters = {"optimize.agent.recenter-leader.period": None},
-                    filtering = {"optimize.agent.recenter-leader.enabled": 'true',
-                                 "optimize.roadsegment.speed-clustering.enabled": 'false',
-                                 "scenario": "large-10.xprj",
-                                 "optimize.agent.recenter-leader.bias": defaultBias
-                    },
-                    default = defaults
-    )
-
-    graph.xycompare(recenterLeaderPeriod,
-                    xy = {"scopes_cdf((delete-create)*avg)": None},
-                    parameters = {"scenario": None},
-                    filtering = {"optimize.agent.recenter-leader.enabled": 'true',
-                                 "optimize.agent.recenter-leader.period": 0,
-                                 "optimize.roadsegment.speed-clustering.enabled": 'false',
-                                 "optimize.agent.recenter-leader.bias": defaultBias
-                    },
-                    default = defaults
-    )
-
-
-
-    graph.backend.closeDocument(recenterLeaderPeriod)
-
-    speedClust = graph.backend.newDocument(path.join(output_dir, "speed_clustering"))
-    graph.xy(speedClust,
-             x = {"optimize.roadsegment.speed-clustering.factor": None},
-             y = {PostFunction("divide", kwparams={"den" : 'roadConn_sum(connect/len(agentConn(id)))', "num" : 'roadInstConn_sum(avg)'}): None},
-             parameters = {"scenario": None},
-             filtering = {"optimize.roadsegment.speed-clustering.enabled": 'true',
-                          "optimize.agent.recenter-leader.enabled": 'false',
-                          # "scenario": "/Users/francois/Developpement/Projets/autotopo/sims/scenarios/batch-tests/speed-diff.xprj"
-             },
-             default = defaults,
-             options = {'xlogscale': True}
-    )
-
-    #duree de vie des scopes
-    graph.xy(speedClust,
-             x = {"optimize.roadsegment.speed-clustering.factor": None},
-             y = {"scopes_avg((delete-create))": None},
-             parameters = {"scenario" : None},
-             filtering = {"optimize.roadsegment.speed-clustering.enabled": 'true',
-                          "optimize.agent.recenter-leader.enabled": 'false',
-                          # "scenario": "/Users/francois/Developpement/Projets/autotopo/sims/scenarios/batch-tests/speed-diff.xprj"
-                          },
-             default = defaults,
-             options = {'xlogscale' : True}
-    )
-
+    # recenterLeaderBias = graph.backend.newDocument(path.join(output_dir, "recenter_leader_bias"))
+    # graph.xy(recenterLeaderBias,
+    #          x = {"optimize.agent.recenter-leader.bias": None},
+    #          y = {"scopes_avg((delete-create))" : None},
+    #          parameters = {"scenario" : None},
+    #          filtering= {"optimize.agent.recenter-leader.enabled" : 'true',
+    #                      "optimize.roadsegment.speed-clustering.enabled": 'false',
+    #                      "optimize.agent.recenter-leader.period" : defaultPeriod
+    #          },
+    #          default = defaults
+    # )
+    #
+    # graph.xy(recenterLeaderBias,
+    #          x = {"optimize.agent.recenter-leader.bias": None},
+    #          y = {"scopes_avg((delete-create)*avg)": None},
+    #          parameters = {"scenario": None},
+    #          filtering = {"optimize.agent.recenter-leader.enabled": 'true',
+    #                       "optimize.roadsegment.speed-clustering.enabled": 'false',
+    #                       "optimize.agent.recenter-leader.period": defaultPeriod
+    #          },
+    #          default = defaults
+    # )
+    #
+    # graph.xy(recenterLeaderBias,
+    #          x = {"optimize.agent.recenter-leader.bias": None},
+    #          y = {"roadConn_sum(connect/len(agentConn(id)))": None},
+    #          parameters = {"scenario": None},
+    #          filtering = {"optimize.agent.recenter-leader.enabled": 'true',
+    #                       "optimize.roadsegment.speed-clustering.enabled": 'false',
+    #                       "optimize.agent.recenter-leader.period": defaultPeriod
+    #          },
+    #          default = defaults
+    # )
+    #
+    # graph.xycompare(recenterLeaderBias,
+    #            xy = {"scopes_cdf((delete-create)*avg)" : None},
+    #            parameters = {"optimize.agent.recenter-leader.bias": None},
+    #            filtering = {"optimize.agent.recenter-leader.enabled": 'true',
+    #                         "optimize.roadsegment.speed-clustering.enabled": 'false',
+    #                         "scenario" : "large-10.xprj",
+    #                         "optimize.agent.recenter-leader.period": defaultPeriod
+    #            },
+    #            default = defaults
+    # )
+    #
+    # graph.xycompare(recenterLeaderBias,
+    #                 xy = {"scopes_cdf((delete-create)*avg)": None},
+    #                 parameters = {"scenario" : None},
+    #                 filtering = {"optimize.agent.recenter-leader.enabled": 'true',
+    #                              "optimize.agent.recenter-leader.bias": defaultBias,
+    #                              "optimize.roadsegment.speed-clustering.enabled": 'false'
+    #                 },
+    #                 default = defaults
+    # )
+    #
+    # graph.backend.closeDocument(recenterLeaderBias)
+    #
+    # recenterLeaderPeriod = graph.backend.newDocument(path.join(output_dir, "recenter_leader_period"))
+    #
+    # graph.xy(recenterLeaderPeriod,
+    #          x = {"optimize.agent.recenter-leader.period": None},
+    #          y = {"scopes_avg((delete-create))": None},
+    #          parameters = {"scenario": None},
+    #          filtering = {"optimize.agent.recenter-leader.enabled": 'true',
+    #                       "optimize.roadsegment.speed-clustering.enabled": 'false',
+    #                       "optimize.agent.recenter-leader.bias" : defaultBias
+    #          },
+    #          default = defaults
+    # )
+    #
+    # graph.xy(recenterLeaderPeriod,
+    #          x = {"optimize.agent.recenter-leader.period": None},
+    #          y = {"scopes_avg((delete-create)*avg)": None},
+    #          parameters = {"scenario": None},
+    #          filtering = {"optimize.agent.recenter-leader.enabled": 'true',
+    #                       "optimize.roadsegment.speed-clustering.enabled": 'false',
+    #                       "optimize.agent.recenter-leader.bias": defaultBias
+    #          },
+    #          default = defaults
+    # )
+    #
+    # graph.xy(recenterLeaderPeriod,
+    #          x = {"optimize.agent.recenter-leader.period": None},
+    #          y = {"roadConn_sum(connect/len(agentConn(id)))": None},
+    #          parameters = {"scenario": None},
+    #          filtering = {"optimize.agent.recenter-leader.enabled": 'true',
+    #                       "optimize.roadsegment.speed-clustering.enabled": 'false',
+    #                       "optimize.agent.recenter-leader.bias": defaultBias
+    #          },
+    #          default = defaults
+    # )
+    #
+    # graph.xycompare(recenterLeaderPeriod,
+    #                 xy = {"scopes_cdf((delete-create)*avg)": None},
+    #                 parameters = {"optimize.agent.recenter-leader.period": None},
+    #                 filtering = {"optimize.agent.recenter-leader.enabled": 'true',
+    #                              "optimize.roadsegment.speed-clustering.enabled": 'false',
+    #                              "scenario": "large-10.xprj",
+    #                              "optimize.agent.recenter-leader.bias": defaultBias
+    #                 },
+    #                 default = defaults
+    # )
+    #
+    # graph.xycompare(recenterLeaderPeriod,
+    #                 xy = {"scopes_cdf((delete-create)*avg)": None},
+    #                 parameters = {"scenario": None},
+    #                 filtering = {"optimize.agent.recenter-leader.enabled": 'true',
+    #                              "optimize.agent.recenter-leader.period": 0,
+    #                              "optimize.roadsegment.speed-clustering.enabled": 'false',
+    #                              "optimize.agent.recenter-leader.bias": defaultBias
+    #                 },
+    #                 default = defaults
+    # )
+    #
+    #
+    #
+    # graph.backend.closeDocument(recenterLeaderPeriod)
+    #
+    # speedClust = graph.backend.newDocument(path.join(output_dir, "speed_clustering"))
     # graph.xy(speedClust,
     #          x = {"optimize.roadsegment.speed-clustering.factor": None},
-    #          y = {"scopes_avg(avg)": None},
+    #          y = {PostFunction("divide", kwparams={"den" : 'roadConn_sum(connect/len(agentConn(id)))', "num" : 'roadInstConn_sum(avg)'}): None},
     #          parameters = {"scenario": None},
     #          filtering = {"optimize.roadsegment.speed-clustering.enabled": 'true',
+    #                       "optimize.agent.recenter-leader.enabled": 'false',
     #                       # "scenario": "/Users/francois/Developpement/Projets/autotopo/sims/scenarios/batch-tests/speed-diff.xprj"
-    #          }
+    #          },
+    #          default = defaults,
+    #          options = {'xlogscale': True}
     # )
-
-    #duree de vie * nombre moyen des scopes
-    graph.xycompare(speedClust,
-                    xy = {"scopes_cdf((delete-create)*avg)": None},
-                    parameters = {"optimize.roadsegment.speed-clustering.factor" : None},
-                    filtering = {"optimize.roadsegment.speed-clustering.enabled": 'true',
-                                 "scenario": "speed-diff.xprj",
-                                 "optimize.agent.recenter-leader.enabled": 'false',
-                                 },
-                    default = defaults
-    )
-
-    graph.backend.closeDocument(speedClust)
+    #
+    # #duree de vie des scopes
+    # graph.xy(speedClust,
+    #          x = {"optimize.roadsegment.speed-clustering.factor": None},
+    #          y = {"scopes_avg((delete-create))": None},
+    #          parameters = {"scenario" : None},
+    #          filtering = {"optimize.roadsegment.speed-clustering.enabled": 'true',
+    #                       "optimize.agent.recenter-leader.enabled": 'false',
+    #                       # "scenario": "/Users/francois/Developpement/Projets/autotopo/sims/scenarios/batch-tests/speed-diff.xprj"
+    #                       },
+    #          default = defaults,
+    #          options = {'xlogscale' : True}
+    # )
+    #
+    # # graph.xy(speedClust,
+    # #          x = {"optimize.roadsegment.speed-clustering.factor": None},
+    # #          y = {"scopes_avg(avg)": None},
+    # #          parameters = {"scenario": None},
+    # #          filtering = {"optimize.roadsegment.speed-clustering.enabled": 'true',
+    # #                       # "scenario": "/Users/francois/Developpement/Projets/autotopo/sims/scenarios/batch-tests/speed-diff.xprj"
+    # #          }
+    # # )
+    #
+    # #duree de vie * nombre moyen des scopes
+    # graph.xycompare(speedClust,
+    #                 xy = {"scopes_cdf((delete-create)*avg)": None},
+    #                 parameters = {"optimize.roadsegment.speed-clustering.factor" : None},
+    #                 filtering = {"optimize.roadsegment.speed-clustering.enabled": 'true',
+    #                              "scenario": "speed-diff.xprj",
+    #                              "optimize.agent.recenter-leader.enabled": 'false',
+    #                              },
+    #                 default = defaults
+    # )
+    #
+    # graph.backend.closeDocument(speedClust)
 
     # 'roadsegments.instances.1.end'
     # 'roadsegments.instances.1.next'
@@ -453,6 +457,7 @@ def makeGraphs(output_dir, graph):
     #
     # 'scopes_avg((delete-create))'
     # 'scopes_avg((delete-create)*avg)'
+    # 'scopes_avg(avg)',
     # 'scopes_cdf((delete-create))'
     # 'scopes_cdf((delete-create)*avg)'
     # 'scopes_cdf(avg)'
@@ -480,8 +485,8 @@ def makeGraphs(output_dir, graph):
     all_topology(output_dir, graph, defaults)
 
 def all_topology(output_dir, graph, defaults):
-    defaultBias = 0
-    defaultPeriod = 0
+    defaultBias = 0.5
+    defaultPeriod = 5
     xy = [
         'agentConn_avg(connect/time(time))',
         'agentInstConn_avg(avg)',
@@ -489,7 +494,9 @@ def all_topology(output_dir, graph, defaults):
         'roadInstConn_sum(avg)',
         'scopes_avg((delete-create))',
         'scopes_avg((delete-create)*avg)',
+        'scopes_avg(avg)',
         'timeAgentConn_avg(avg)',
+        PostFunction("divide", kwparams={"num" : 'roadInstConn_sum(avg)', "den" : 'numbers_avg(number)'})
     ]
 
     xyc = [
@@ -498,7 +505,9 @@ def all_topology(output_dir, graph, defaults):
         'scopes_cdf(avg)',
         'scopes_cdf((delete-create))',
         'scopes_cdf((delete-create)*avg)',
+        'scopes_cdf(avg)',
         'timeAgentConn_cdf(avg)',
+        'speed_cdf(avg)'
         # 'timeRoadConn_time,avg/numbers(number)'
     ]
 
@@ -614,6 +623,11 @@ if __name__ == "__main__":
         "zip" : Zip
     }
 
+    AVAIL_BACKEND = {
+        'csv' : CsvBackend,
+        'graph' : GraphBackend
+    }
+
     def add_common_arguments(par):
         par.add_argument("--database", default="sims")
         par.add_argument("--storage-type", choices=AVAIL_STORAGE, default="zip")
@@ -637,10 +651,13 @@ if __name__ == "__main__":
     graph = mode.add_parser("graph")  #, parents=[parser])
     graph.set_defaults(action=ACTION_GRAPH)
     graph.add_argument("--output-dir", default = "graphs")
+    graph.add_argument("--backend", choices = AVAIL_BACKEND.keys(), default = 'graph')
+    graph.add_argument("--graph-backend", choices = GRAPH_BACKENDS, default = "matplotlib")
     add_common_arguments(graph)
 
     opts = parser.parse_args()
-    p = AVAIL_STORAGE[opts.storage_type](opts.database)
+
+    p = AVAIL_STORAGE[opts.storage_type](opts.database, mode = 'r' if opts.action == ACTION_GRAPH else 'w')
 
     with p as storage:
         if opts.action == ACTION_WRITE:
@@ -667,6 +684,7 @@ if __name__ == "__main__":
                 storage.flush()
             print "Results recorded"
         elif opts.action == ACTION_GRAPH:
+
             if not path.exists(opts.output_dir):
                 from os import mkdir
 
@@ -680,8 +698,9 @@ if __name__ == "__main__":
                     print "Crunching results"
                     res = crunchResults(params, scenario, data)
                     storage.write_row(res)
-
-            thegraph = Graph(storage)
+            if opts.backend == 'graph':
+                GraphBackend.setGrapher(opts.graph_backend)
+            thegraph = Graph(storage, backend = AVAIL_BACKEND[opts.backend])
             makeGraphs(opts.output_dir, thegraph)
 
 
